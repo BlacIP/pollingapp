@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--bg, #0c1120);
+  color: var(--text, #d8def0);
+}
+
+.input {
+  width: 100%;
+  background-color: #0c1120;
+  color: var(--text, #d8def0);
+  border: 1px solid var(--stroke, #232a3b);
+  border-radius: 1rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  outline: none;
+}
+.textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  background-color: #0c1120;
+  color: var(--text, #d8def0);
+  border: 1px solid var(--stroke, #232a3b);
+  border-radius: 1rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  outline: none;
+}
+.select {
+  position: relative;
+}
+.select select {
+  width: 100%;
+  background-color: #0c1120;
+  color: var(--text, #d8def0);
+  border: 1px solid var(--stroke, #232a3b);
+  border-radius: 1rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  outline: none;
+  appearance: none;
+}
+.select::after {
+  content: "▾";
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted, #5b6c91);
+  pointer-events: none;
+}
+
+.btn {
+  background-color: #1f2842;
+  color: #d8def0;
+  border: 1px solid var(--stroke, #232a3b);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-radius: 1rem;
+  cursor: pointer;
+}
+.btn-primary {
+  background-color: var(--primary, #6366f1);
+  border-color: transparent;
+  color: #fff;
+}
+.btn-primary:hover {
+  background-color: var(--primary2, #4f46e5);
+}
+.btn-ghost {
+  background-color: transparent;
+}
+.icon-btn {
+  background-color: transparent;
+  border: 1px solid var(--stroke, #232a3b);
+  color: var(--muted, #5b6c91);
+  border-radius: 1rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  cursor: pointer;
+}
+
+.card {
+  background-color: var(--card, #181e2f);
+  border: 1px solid var(--stroke, #232a3b);
+  border-radius: 1rem;
+  box-shadow: 0 2px 8px 0 rgba(16, 24, 40, 0.05);
+}
+.label {
+  display: block;
+  color: var(--muted, #5b6c91);
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+.link {
+  color: #9aaafc;
+  cursor: pointer;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 3.5rem;
+  height: 2rem;
+}
+.switch input {
+  display: none;
+}
+.switch span {
+  position: absolute;
+  inset: 0;
+  background-color: #0c1120;
+  border: 1px solid var(--stroke, #232a3b);
+  border-radius: 9999px;
+}
+.switch span::after {
+  content: "";
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  background-color: #5b6c91;
+  top: 0.25rem;
+  left: 0.25rem;
+  transition: all 0.2s;
+}
+.switch input:checked + span {
+  background-color: #1a2341;
+  border-color: #3b4a73;
+}
+.switch input:checked + span::after {
+  left: 1.75rem;
+  background-color: var(--primary, #6366f1);
+}

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Polling App</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+</head>
+<body>
+  <header class="container">
+    <h1>Create a Poll</h1>
+    <p class="subtitle">Complete the fields below to create your poll.</p>
+  </header>
+
+  <!-- CREATE CARD -->
+  <main class="container grid">
+    <section class="card">
+      <div class="card-body">
+        <label class="label">Title</label>
+        <input id="poll-title" class="input" placeholder="Type your question here"/>
+
+        <button id="add-desc" class="link">+ Add description or image</button>
+        <div id="desc-wrap" class="collapse">
+          <textarea id="poll-desc" class="textarea" placeholder="Optional description…"></textarea>
+          <input id="img-url" class="input" placeholder="Image URL (optional)"/>
+        </div>
+
+        <div class="row">
+          <div class="col">
+            <label class="label" for="poll-type">Poll type</label>
+            <div class="select">
+              <select id="poll-type">
+                <option value="single">Single choice</option>
+                <option value="multiple">Multiple choice</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <label class="label mt-16">Answer Options <span id="paste" class="link sm">Paste answers</span></label>
+        <div id="options">
+          <div class="option-row">
+            <input class="input opt" placeholder="Option 1"/>
+            <button class="icon-btn remove" title="Remove">✕</button>
+          </div>
+          <div class="option-row">
+            <input class="input opt" placeholder="Option 2"/>
+            <button class="icon-btn remove" title="Remove">✕</button>
+          </div>
+        </div>
+        <div class="option-actions">
+          <button id="add-option" class="btn ghost">+ Add option</button>
+          <button id="add-other" class="link sm">Add "Other"</button>
+        </div>
+
+        <h3 class="section-title">Settings</h3>
+        <div class="settings">
+          <div class="setting">
+            <label class="switch" for="allow-multi">
+              <span>Allow selection of multiple options</span>
+              <input id="allow-multi" type="checkbox" title="Allow selection of multiple options"/>
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting">
+            <label for="require-name">
+              Require participant names
+              <span class="visually-hidden">(checkbox)</span>
+            </label>
+            <label class="switch">
+              <input id="require-name" type="checkbox" title="Require participant names"/>
+              <span></span>
+            </label>
+          </div>
+
+          <div class="setting">
+            <span>Voting security</span>
+            <div class="select">
+              <select id="vote-security" title="Voting security">
+                <option value="none">None (multiple votes allowed)</option>
+                <option value="session">One vote per browser session</option>
+                <option value="device">One vote per device</option>
+                <option value="code">One vote per unique code</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="setting">
+            <span>Use CAPTCHA</span>
+            <label class="switch">
+              <label for="use-captcha" class="visually-hidden">Use CAPTCHA</label>
+              <input id="use-captcha" type="checkbox" title="Enable CAPTCHA for voting"/>
+              <span></span>
+            </label>
+          </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Show advanced settings</summary>
+          <div class="adv-grid">
+            <div>
+              <label class="label">Close time (optional)</label>
+              <input id="close-at" type="datetime-local" class="input"/>
+            </div>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button id="create-btn" class="btn primary">Create poll</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PREVIEW / VOTE CARD -->
+    <section id="active-card" class="card hidden">
+      <div class="card-body">
+        <div class="poll-header">
+          <h2 id="view-title"></h2>
+          <button id="menu-btn" class="icon-btn">⋯</button>
+          <ul id="menu" class="menu hidden">
+            <li id="reset-poll">Reset</li>
+            <li id="export-poll">Export results (CSV)</li>
+            <li id="delete-poll">Delete</li>
+          </ul>
+        </div>
+        <p id="view-desc" class="muted"></p>
+        <img id="view-img" class="hero hidden" alt="poll image"/>
+
+        <form id="vote-form" class="vote">
+          <div id="vote-options"></div>
+
+          <div id="name-row" class="collapse mt-12">
+            <input id="voter-name" class="input" placeholder="Your name"/>
+          </div>
+
+          <div class="vote-actions">
+            <button id="vote-btn" class="btn primary" type="submit">Vote</button>
+            <button id="show-results" class="btn ghost" type="button">Show results</button>
+            <button id="share-open" class="btn ghost" type="button">Share</button>
+          </div>
+        </form>
+
+        <div id="results" class="hidden">
+          <canvas id="resultsChart"></canvas>
+        </div>
+
+        <p id="security-note" class="hint"></p>
+      </div>
+    </section>
+
+    <!-- SAVED POLLS -->
+    <aside id="polls" class="card hidden">
+      <div class="card-body">
+        <h3>Saved Polls</h3>
+        <ul id="polls-list" class="list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <!-- SHARE MODAL -->
+  <div id="share-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Share</h3>
+        <button id="share-close" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="label">Share via link</label>
+        <div class="row gap">
+          <input id="share-link" class="input flex" readonly title="Shareable link" placeholder="Shareable link"/>
+          <button id="copy-link" class="btn">Copy</button>
+        </div>
+        <div class="share-grid">
+          <a id="share-whatsapp" class="share-btn">WhatsApp</a>
+          <a id="share-twitter" class="share-btn">Twitter</a>
+          <a id="share-facebook" class="share-btn">Facebook</a>
+          <div id="qrcode" class="qrcode"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button id="close-modal" class="btn ghost">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
