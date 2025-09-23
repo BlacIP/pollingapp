@@ -1,12 +1,11 @@
 import { QRCodeCanvas } from "qrcode.react";
 
 export default function ShareModal({ poll, onClose }) {
-  const url = `${location.origin}${location.pathname}#${poll.id}`;
+  const url = `${window.location.origin}/?poll=${poll.id}`;
   const copy = async () => { 
     try { 
       await navigator.clipboard.writeText(url); 
     } catch (err) { 
-      // Optionally handle error, e.g., show a message or log
       console.error("Failed to copy to clipboard", err);
     } 
   };

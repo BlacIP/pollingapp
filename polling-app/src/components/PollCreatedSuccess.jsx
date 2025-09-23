@@ -3,7 +3,7 @@ import { useState } from "react";
 export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewlyCreated = false }) {
   const [copied, setCopied] = useState(false);
   
-  const pollUrl = `${window.location.origin}/poll/${poll.id}`; // Use 'id' not 'poll_id'
+  const pollUrl = `${window.location.origin}/?poll=${poll.id}`;
   
   // Handle votes - convert object to array if needed
   let totalVotes = 0;

@@ -76,6 +76,23 @@ export default function App() {
     localStorage.setItem("auth_login_time", Date.now().toString());
   };
 
+    useEffect(() => {
+    if (auth) {
+      // Check for poll parameter in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const pollId = urlParams.get('poll');
+      if (pollId) {
+        // Find and open the poll
+        const poll = polls.find(p => p.id === pollId);
+        if (poll) {
+          setActiveId(pollId);
+          setShowSuccess(true);
+          setIsNewlyCreated(false);
+        }
+      }
+    }
+  }, [auth, polls]);
+
   const handleSignOut = () => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_user");
@@ -191,9 +208,6 @@ export default function App() {
     }
   };
 
-  const updatePoll = (updatedPoll) => {
-    setPolls(polls.map(p => p.id === updatedPoll.id ? updatedPoll : p));
-  };
 
   const deletePollLocal = (pollId) => {
     setPolls(polls.filter(p => p.id !== pollId));
