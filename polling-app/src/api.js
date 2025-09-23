@@ -1,4 +1,4 @@
-export const BASE_URL = 'https://script.google.com/macros/s/AKfycbyzMXI4IhCFyIlmXMlkMa9L7UltF3GOOSj_bKuXZ_3qV2-9jhukHNJcWBZRsSUXHAAb/exec';
+export const BASE_URL = 'https://script.google.com/macros/s/AKfycbzvA4qff5VfzEm0H75oyOjLE-qZ1Y5zWgpQch1jtiNYZqmAlSgIiaFR9FmuLyrNKTlL/exec';
 
 // Error logging helper
 function logApiError(endpoint, error) {
@@ -203,6 +203,69 @@ export function vote(poll_id, option_index, voter_name = '') {
   };
   
   return withRetry(() => post('polls/vote', voteData));
+}
+
+export function getPublicPoll(poll_id) {
+  if (!poll_id) {
+    return Promise.resolve({ ok: false, error: 'Poll ID required' });
+  }
+  
+  // Use the existing polls/results endpoint which might be public
+  return withRetry(() => get('polls/results', { poll_id }));
+}
+
+export function submitPublicVote(poll_id, option_indices, voter_name = '') {
+  if (!poll_id) {
+    return Promise.resolve({ ok: false, error: 'Poll ID required' });
+  }
+  if (!option_indices || option_indices.length === 0) {
+    return Promise.resolve({ ok: false, error: 'At least one option must be selected' });
+  }
+  
+  // For single votes, use the existing vote function
+  if (option_indices.length === 1) {
+    return vote(poll_id, option_indices[0], voter_name);
+  }
+  
+  // For multiple votes, we need to submit each one separately
+  // This is a limitation of the current backend
+  const votePromises = option_indices.map(index => 
+    vote(poll_id, index, voter_name)
+  );
+  
+  return Promise.all(votePromises).then(results => {
+    const failed = results.find(r => !r.ok);
+    if (failed) {
+      return failed;
+    }
+    return { ok: true };
+  });
+}
+
+export function updatePollStatus(token, poll_id, status) {
+  if (!token || !poll_id || !status) {
+    return Promise.resolve({ ok: false, error: 'Token, poll ID and status are required' });
+  }
+  
+  const statusData = {
+    poll_id,
+    status,
+    updated_at: new Date().toISOString()
+  };
+  
+  if (status === 'deleted') {
+    statusData.deleted_at = new Date().toISOString();
+  }
+  
+  return withRetry(() => post('polls/status', statusData, token));
+}
+
+export function permanentlyDeletePoll(token, poll_id) {
+  if (!token || !poll_id) {
+    return Promise.resolve({ ok: false, error: 'Token and poll ID are required' });
+  }
+  
+  return withRetry(() => post('polls/permanent-delete', { poll_id }, token));
 }
 
 // Utility functions for local storage

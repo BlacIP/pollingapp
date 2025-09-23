@@ -5,11 +5,13 @@ import PollList from "./components/PollList.jsx";
 import PollCreatedSuccess from "./components/PollCreatedSuccess.jsx";
 import ShareModal from "./components/ShareModal.jsx";
 import AuthPage from "./auth/AuthPage.jsx";
-import { myPolls, createPoll } from "./api.js";
+import { myPolls, createPoll, updatePollStatus, permanentlyDeletePoll } from "./api.js";
 import PollResults from "./components/PollResults.jsx";
+import PublicPollVote from "./components/PublicPollVote.jsx";
 
 export default function App() {
   const [auth, setAuth] = useState(null);
+  const [authLoaded, setAuthLoaded] = useState(false);
   const [polls, setPolls] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -38,6 +40,7 @@ export default function App() {
         localStorage.removeItem("auth_login_time");
       }
     }
+    setAuthLoaded(true);
   }, []);
 
   // Load polls from remote only
@@ -76,13 +79,35 @@ export default function App() {
     localStorage.setItem("auth_login_time", Date.now().toString());
   };
 
-    useEffect(() => {
-    if (auth) {
-      // Check for poll parameter in URL
+  const handleSignOut = () => {
+    setAuth(null);
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    localStorage.removeItem("auth_login_time");
+    setPolls([]);
+    setActiveId(null);
+    setShowSuccess(false);
+    setShowResults(false);
+  };
+
+  // Check for public poll access first
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pollId = urlParams.get('poll');
+    
+    // If there's a poll ID in URL and no auth, show public voting interface
+    if (pollId && !auth) {
+      // Don't redirect to auth, show public poll instead
+      return;
+    }
+  }, []);
+
+  // Check for poll parameter after auth is loaded
+  useEffect(() => {
+    if (authLoaded && auth && polls.length > 0) {
       const urlParams = new URLSearchParams(window.location.search);
       const pollId = urlParams.get('poll');
       if (pollId) {
-        // Find and open the poll
         const poll = polls.find(p => p.id === pollId);
         if (poll) {
           setActiveId(pollId);
@@ -91,17 +116,26 @@ export default function App() {
         }
       }
     }
-  }, [auth, polls]);
+  }, [authLoaded, auth, polls]);
 
-  const handleSignOut = () => {
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("auth_user");
-    localStorage.removeItem("auth_login_time");
-    setAuth(null);
-    setPolls([]);
-    setActiveId(null);
-    setShowSuccess(false);
-  };
+  // Show loading while checking auth
+  if (!authLoaded) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if this is a public poll access
+  const urlParams = new URLSearchParams(window.location.search);
+  const publicPollId = urlParams.get('poll');
+  
+  if (publicPollId && !auth) {
+    return <PublicPollVote pollId={publicPollId} />;
+  }
 
   if (!auth) return <AuthPage onSignedIn={handleSignIn} />;
 
@@ -209,10 +243,54 @@ export default function App() {
   };
 
 
-  const deletePollLocal = (pollId) => {
-    setPolls(polls.filter(p => p.id !== pollId));
-    setActiveId(null);
-    setShowSuccess(false);
+  const handleStatusChange = async (pollId, newStatus) => {
+    try {
+      const res = await updatePollStatus(auth.token, pollId, newStatus);
+      if (res?.ok) {
+        // Update local state
+        setPolls(prev => prev.map(poll => 
+          poll.id === pollId 
+            ? { 
+                ...poll, 
+                status: newStatus,
+                ...(newStatus === 'deleted' ? { deleted_at: new Date().toISOString() } : {})
+              }
+            : poll
+        ));
+        
+        // If current active poll was deleted/disabled, close it
+        if (pollId === activeId && (newStatus === 'deleted' || newStatus === 'disabled')) {
+          setActiveId(null);
+          setShowSuccess(false);
+        }
+      } else {
+        setError(res?.error || 'Failed to update poll status');
+      }
+    } catch (err) {
+      setError('Failed to update poll status');
+    }
+  };
+
+  const deletePollLocal = async (pollId, permanent = false) => {
+    if (permanent) {
+      try {
+        const res = await permanentlyDeletePoll(auth.token, pollId);
+        if (res?.ok) {
+          setPolls(polls.filter(p => p.id !== pollId));
+          if (activeId === pollId) {
+            setActiveId(null);
+            setShowSuccess(false);
+          }
+        } else {
+          setError(res?.error || 'Failed to delete poll permanently');
+        }
+      } catch (err) {
+        setError('Failed to delete poll permanently');
+      }
+    } else {
+      // Soft delete - move to trash
+      handleStatusChange(pollId, 'deleted');
+    }
   };
 
   const handleBackToPolls = () => {
@@ -318,6 +396,7 @@ export default function App() {
               setShareOpen(true);
             }}
             onDelete={deletePollLocal}
+            onStatusChange={handleStatusChange}
           />
         </aside>
       </main>
