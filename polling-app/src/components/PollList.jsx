@@ -56,7 +56,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
         break;
       case 'permanent_delete':
         if (confirm(`Permanently delete "${poll.title}"? This cannot be undone.`)) {
-          onDelete(poll.id, true); // true for permanent delete
+          onDelete(poll.id, true);
         }
         break;
     }
@@ -74,7 +74,6 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
           const status = poll.status || POLL_STATUS.ACTIVE;
           const availableActions = getAvailableActions(status);
           
-          // Handle votes - convert object to array if needed
           let totalVotes = 0;
           if (Array.isArray(poll.votes)) {
             totalVotes = poll.votes.reduce((sum, count) => sum + count, 0);
@@ -82,7 +81,6 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
             totalVotes = Object.values(poll.votes).reduce((sum, count) => sum + count, 0);
           }
           
-          // Format created date
           const createdDate = poll.created_at ? new Date(poll.created_at).toLocaleDateString() : '';
           
           return (
@@ -95,9 +93,8 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                   : isActive 
                     ? 'border-primary bg-primary/10 cursor-pointer' 
                     : 'border-gray-600 bg-gray-700/50 hover:bg-gray-700/70 cursor-pointer'
-              }`}
+              } ${poll.pending ? 'opacity-70 border-yellow-500' : ''}`}
             >
-              {/* Three dots menu */}
               <div className="absolute top-3 right-3">
                 <button 
                   onClick={(e) => handleMenuClick(e, pollId)}
@@ -106,7 +103,6 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                   ⋯
                 </button>
                 
-                {/* Dropdown menu */}
                 {isMenuOpen && (
                   <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 min-w-[160px] z-10">
                     {status !== POLL_STATUS.DELETED && (
@@ -152,15 +148,16 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                 )}
               </div>
               
-              {/* Poll title */}
               <h4 className="text-white font-medium text-base mb-2 pr-8 leading-tight">
                 {poll.title}
                 {status === POLL_STATUS.DELETED && (
                   <span className="text-red-400 text-sm ml-2">(Deleted)</span>
                 )}
+                {poll.pending && (
+                  <span className="text-yellow-400 text-sm ml-2">(Saving...)</span>
+                )}
               </h4>
               
-              {/* Response count and status */}
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-gray-400 text-sm">
@@ -182,7 +179,6 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
         })}
       </div>
       
-      {/* Click outside to close menu */}
       {openMenuId && (
         <div 
           className="fixed inset-0 z-5" 

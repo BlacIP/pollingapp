@@ -147,3 +147,18 @@ body {
   left: 1.75rem;
   background-color: var(--primary, #6366f1);
 }
+
+/* Add styles for pending polls */
+.poll-item.pending {
+  opacity: 0.7;
+  border-left: 3px solid #fbbf24;
+}
+
+.pending-badge {
+  background: #fbbf24;
+  color: #000;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}

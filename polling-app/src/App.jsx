@@ -118,6 +118,41 @@ export default function App() {
     }
   }, [authLoaded, auth, polls]);
 
+  // Add background sync effect
+  useEffect(() => {
+    if (!auth?.token) return;
+    
+    // Start background sync
+    try {
+      startBackgroundSync(auth.token);
+    } catch (error) {
+      console.error("Error starting background sync:", error);
+    }
+
+    // Listen for background poll updates
+    const handlePollsUpdated = (event) => {
+      const { polls: updatedPolls, source } = event.detail;
+      if (source === 'background' && Array.isArray(updatedPolls)) {
+        console.log('Background sync: Updating polls in UI');
+        setPolls(updatedPolls);
+      } else {
+        console.error('Invalid polls data received during background sync:', updatedPolls);
+      }
+    };
+
+    window.addEventListener('pollsUpdated', handlePollsUpdated);
+
+    // Cleanup
+    return () => {
+      try {
+        stopBackgroundSync();
+      } catch (error) {
+        console.error("Error stopping background sync:", error);
+      }
+      window.removeEventListener('pollsUpdated', handlePollsUpdated);
+    };
+  }, [auth?.token]);
+
   // Show loading while checking auth
   if (!authLoaded) {
     return (
@@ -141,144 +176,6 @@ export default function App() {
 
   const activePoll = polls.find(p => p.id === activeId) || null;
 
-  // Optimistic poll creation - add temp poll immediately, save in background
-  const addPoll = async (pollData) => {
-    setError("");
-    setLoading(true);
-    
-    try {
-      // Create temporary poll for immediate UI update
-      const tempPoll = {
-        id: 'temp_' + Date.now(),
-        ...pollData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        status: 'active',
-        votes: pollData.options.map(() => 0),
-        vote_count: 0,
-        pending: true
-      };
-
-      // Add temp poll to UI immediately
-      setPolls(prev => [tempPoll, ...prev]);
-      setActiveId(tempPoll.id);
-      setShowSuccess(true);
-      setIsNewlyCreated(true);
-      setLoading(false);
-
-      // Submit in background
-      setTimeout(async () => {
-        try {
-          const res = await createPoll(auth.token, pollData);
-          
-          if (res?.ok && res.poll) {
-            // Replace temp poll with real poll
-            setPolls(prev => prev.map(p => 
-              p.id === tempPoll.id ? { ...res.poll, pending: false } : p
-            ));
-            
-            // Update active poll if it's the temp one
-            if (activeId === tempPoll.id) {
-              setActiveId(res.poll.id);
-            }
-          } else {
-            // Remove temp poll on failure
-            setPolls(prev => prev.filter(p => p.id !== tempPoll.id));
-            setError(`Failed to create poll: ${res?.error}`);
-            
-            // Close success view if temp poll was active
-            if (activeId === tempPoll.id) {
-              setActiveId(null);
-              setShowSuccess(false);
-            }
-          }
-        } catch (error) {
-          // Remove temp poll on error
-          setPolls(prev => prev.filter(p => p.id !== tempPoll.id));
-          setError(`Error creating poll: ${error.message}`);
-          
-          if (activeId === tempPoll.id) {
-            setActiveId(null);
-            setShowSuccess(false);
-          }
-        }
-      }, 100);
-
-    } catch (error) {
-      setError(`Error: ${error.message}`);
-      setLoading(false);
-    }
-  };
-
-
-  const handleStatusChange = async (pollId, newStatus) => {
-    try {
-      const res = await updatePollStatus(auth.token, pollId, newStatus);
-      if (res?.ok) {
-        // Update local state
-        setPolls(prev => prev.map(poll => 
-          poll.id === pollId 
-            ? { 
-                ...poll, 
-                status: newStatus,
-                ...(newStatus === 'deleted' ? { deleted_at: new Date().toISOString() } : {})
-              }
-            : poll
-        ));
-        
-        // If current active poll was deleted/disabled, close it
-        if (pollId === activeId && (newStatus === 'deleted' || newStatus === 'disabled')) {
-          setActiveId(null);
-          setShowSuccess(false);
-        }
-      } else {
-        setError(res?.error || 'Failed to update poll status');
-      }
-    } catch (err) {
-      setError('Failed to update poll status');
-    }
-  };
-
-  const deletePollLocal = async (pollId, permanent = false) => {
-    if (permanent) {
-      try {
-        const res = await permanentlyDeletePoll(auth.token, pollId);
-        if (res?.ok) {
-          setPolls(polls.filter(p => p.id !== pollId));
-          if (activeId === pollId) {
-            setActiveId(null);
-            setShowSuccess(false);
-          }
-        } else {
-          setError(res?.error || 'Failed to delete poll permanently');
-        }
-      } catch (err) {
-        setError('Failed to delete poll permanently');
-      }
-    } else {
-      // Soft delete - move to trash
-      handleStatusChange(pollId, 'deleted');
-    }
-  };
-
-  const handleBackToPolls = () => {
-    setActiveId(null);
-    setShowSuccess(false);
-    setShowResults(false);
-    setIsNewlyCreated(false);
-  };
-
-  const handleViewResults = () => {
-    setShowSuccess(false);
-    setShowResults(true);
-  };
-
-  const handleOpenPoll = (id) => {
-    setActiveId(id);
-    setShowSuccess(true);
-    setIsNewlyCreated(false); // This is an existing poll
-  };
-
   // Determine what to show in main section
   const renderMainContent = () => {
     if (loading) {
@@ -289,57 +186,35 @@ export default function App() {
       );
     }
 
-    // Show results view
     if (showResults && activePoll) {
       return (
         <PollResults
           poll={activePoll}
-          onBack={handleBackToPolls}
+          onBack={() => {
+            setActiveId(null);
+            setShowResults(false);
+          }}
           onShare={() => setShareOpen(true)}
         />
       );
     }
 
-    // Show success view for both newly created polls and existing polls
     if (showSuccess && activePoll) {
       return (
         <PollCreatedSuccess
           poll={activePoll}
-          onBack={handleBackToPolls}
-          onViewResults={handleViewResults}
+          onBack={() => {
+            setActiveId(null);
+            setShowSuccess(false);
+          }}
+          onViewResults={() => setShowResults(true)}
           isNewlyCreated={isNewlyCreated}
         />
       );
     }
-    
-    // Default: show create form
-    return <CreatePollForm onCreate={addPoll} loading={loading} />;
-  };
 
-  // Add background sync effect
-  useEffect(() => {
-    if (!auth?.token) return;
-    
-    // Start background sync
-    startBackgroundSync(auth.token);
-    
-    // Listen for background poll updates
-    const handlePollsUpdated = (event) => {
-      const { polls: updatedPolls, source } = event.detail;
-      if (source === 'background') {
-        console.log('Background sync: Updating polls in UI');
-        setPolls(updatedPolls);
-      }
-    };
-    
-    window.addEventListener('pollsUpdated', handlePollsUpdated);
-    
-    // Cleanup
-    return () => {
-      stopBackgroundSync();
-      window.removeEventListener('pollsUpdated', handlePollsUpdated);
-    };
-  }, [auth?.token]);
+    return <CreatePollForm onCreate={(pollData) => addPoll(pollData)} loading={loading} />;
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4">
@@ -375,7 +250,11 @@ export default function App() {
         <aside className="card p-5 h-fit">
           <PollList 
             polls={polls} 
-            onOpen={handleOpenPoll} 
+            onOpen={(id) => {
+              setActiveId(id);
+              setShowSuccess(true);
+              setIsNewlyCreated(false);
+            }}
             activePollId={activeId}
             loading={loading}
             onViewResults={(pollId) => {
@@ -388,8 +267,8 @@ export default function App() {
               setActiveId(poll.id);
               setShareOpen(true);
             }}
-            onDelete={deletePollLocal}
-            onStatusChange={handleStatusChange}
+            onDelete={(pollId, permanent) => deletePollLocal(pollId, permanent)}
+            onStatusChange={(pollId, newStatus) => handleStatusChange(pollId, newStatus)}
           />
         </aside>
       </main>

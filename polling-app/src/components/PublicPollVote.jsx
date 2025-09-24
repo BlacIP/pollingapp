@@ -16,9 +16,19 @@ export default function PublicPollVote({ pollId }) {
       setError("");
       
       try {
+        // Show loading message after 2 seconds
+        const slowLoadingTimer = setTimeout(() => {
+          if (loading) {
+            setError("Loading is taking longer than usual. Google Apps Script may be starting up...");
+          }
+        }, 2000);
+        
         const res = await getPublicPoll(pollId);
+        clearTimeout(slowLoadingTimer);
+        
         if (res?.ok && res.poll) {
           setPoll(res.poll);
+          setError(""); // Clear any loading messages
         } else {
           setError(res?.error || "Poll not found");
         }

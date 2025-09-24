@@ -21,11 +21,18 @@ async function post(path, data = {}, token) {
     const url = buildUrl(path, token);
     console.log('Request URL:', url);
     
+    // Add 10 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(data),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     console.log('Response status:', res.status);
     const text = await res.text();
@@ -46,6 +53,11 @@ async function post(path, data = {}, token) {
       return { ok: false, error };
     }
   } catch (networkError) {
+    if (networkError.name === 'AbortError') {
+      console.error('Request timeout');
+      logApiError(path, 'Request timeout');
+      return { ok: false, error: 'Request timeout - please try again' };
+    }
     console.error('Network error:', networkError);
     logApiError(path, networkError.message);
     return { ok: false, error: 'Network error: ' + networkError.message };
@@ -84,15 +96,15 @@ async function get(path, params = {}) {
 }
 
 // Retry logic for failed requests
-async function withRetry(apiCall, maxRetries = 2) {
+async function withRetry(apiCall, maxRetries = 1) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const result = await apiCall();
       if (result.ok || attempt === maxRetries) {
         return result;
       }
-      // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      // Shorter wait time (500ms instead of 1-2s)
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
       if (attempt === maxRetries) {
         return { ok: false, error: error.message };
@@ -143,15 +155,92 @@ export function checkAuth(token) {
 }
 
 // Poll API functions
+const CACHE_PREFIX = 'poll_cache_';
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+const BACKGROUND_SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutes
+
+function getCachedPoll(pollId) {
+  try {
+    const cached = localStorage.getItem(CACHE_PREFIX + pollId);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_DURATION) {
+        return data;
+      }
+    }
+  } catch (error) {
+    console.error('Cache read error:', error);
+  }
+  return null;
+}
+
+function setCachedPoll(pollId, pollData) {
+  try {
+    const cacheData = {
+      data: pollData,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(CACHE_PREFIX + pollId, JSON.stringify(cacheData));
+  } catch (error) {
+    console.error('Cache write error:', error);
+  }
+}
+
+// Add caching for user's polls
 export function myPolls(token) {
   if (!token) {
     return Promise.resolve({ ok: false, error: 'Authentication required' });
   }
   
-  return withRetry(() => get('polls/mine', { token }));
+  // Check cache first
+  const POLLS_CACHE_KEY = 'user_polls_cache';
+  try {
+    const cached = localStorage.getItem(POLLS_CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_DURATION) {
+        console.log('Returning cached user polls');
+        return Promise.resolve({ ok: true, polls: data });
+      }
+    }
+  } catch (error) {
+    console.error('User polls cache read error:', error);
+  }
+  
+  // Fetch from API and cache
+  return withRetry(() => get('polls/mine', { token }))
+    .then(result => {
+      if (result.ok && result.polls) {
+        try {
+          // Cache user's polls
+          const cacheData = {
+            data: result.polls,
+            timestamp: Date.now()
+          };
+          localStorage.setItem(POLLS_CACHE_KEY, JSON.stringify(cacheData));
+          console.log('Cached user polls:', result.polls.length);
+          
+          // Also cache individual polls
+          result.polls.forEach(poll => {
+            setCachedPoll(poll.id, poll);
+          });
+        } catch (error) {
+          console.error('Failed to cache user polls:', error);
+        }
+      }
+      return result;
+    });
 }
 
-
+// Clear user polls cache when needed
+export function clearUserPollsCache() {
+  try {
+    localStorage.removeItem('user_polls_cache');
+    console.log('Cleared user polls cache');
+  } catch (error) {
+    console.error('Failed to clear user polls cache:', error);
+  }
+}
 
 export function createPoll(token, payload) {
   if (!token) {
@@ -159,7 +248,6 @@ export function createPoll(token, payload) {
     return Promise.resolve({ ok: false, error: 'Authentication required' });
   }
   
-  // Validate payload
   if (!payload.title || !payload.options || payload.options.length < 2) {
     console.error('createPoll: Invalid payload', payload);
     return Promise.resolve({ ok: false, error: 'Title and at least 2 options required' });
@@ -210,8 +298,21 @@ export function getPublicPoll(poll_id) {
     return Promise.resolve({ ok: false, error: 'Poll ID required' });
   }
   
-  // Use the existing polls/results endpoint which might be public
-  return withRetry(() => get('polls/results', { poll_id }));
+  // Check cache first
+  const cached = getCachedPoll(poll_id);
+  if (cached) {
+    console.log('Returning cached poll:', poll_id);
+    return Promise.resolve({ ok: true, poll: cached });
+  }
+  
+  // Fetch from API and cache result
+  return withRetry(() => get('polls/results', { poll_id }))
+    .then(result => {
+      if (result.ok && result.poll) {
+        setCachedPoll(poll_id, result.poll);
+      }
+      return result;
+    });
 }
 
 export function submitPublicVote(poll_id, option_indices, voter_name = '') {
@@ -242,6 +343,7 @@ export function submitPublicVote(poll_id, option_indices, voter_name = '') {
   });
 }
 
+// Update cache when poll status changes
 export function updatePollStatus(token, poll_id, status) {
   if (!token || !poll_id || !status) {
     return Promise.resolve({ ok: false, error: 'Token, poll ID and status are required' });
@@ -257,15 +359,30 @@ export function updatePollStatus(token, poll_id, status) {
     statusData.deleted_at = new Date().toISOString();
   }
   
-  return withRetry(() => post('polls/status', statusData, token));
+  return withRetry(() => post('polls/status', statusData, token))
+    .then(result => {
+      if (result.ok) {
+        // Clear cache so next myPolls() call fetches fresh data
+        clearUserPollsCache();
+      }
+      return result;
+    });
 }
 
+// Update cache when poll is permanently deleted
 export function permanentlyDeletePoll(token, poll_id) {
   if (!token || !poll_id) {
     return Promise.resolve({ ok: false, error: 'Token and poll ID are required' });
   }
   
-  return withRetry(() => post('polls/permanent-delete', { poll_id }, token));
+  return withRetry(() => post('polls/permanent-delete', { poll_id }, token))
+    .then(result => {
+      if (result.ok) {
+        // Clear cache so next myPolls() call fetches fresh data
+        clearUserPollsCache();
+      }
+      return result;
+    });
 }
 
 // Utility functions for local storage
@@ -310,5 +427,103 @@ export function debugApi(enabled = false) {
       clearStorage: clearAuth
     };
     console.log('API debug tools available at window.apiDebug');
+  }
+}
+
+// Optimistic poll creation
+export function createPollOptimistic(token, payload) {
+  if (!token) {
+    return Promise.resolve({ ok: false, error: 'Authentication required' });
+  }
+  
+  if (!payload.title || !payload.options || payload.options.length < 2) {
+    return Promise.resolve({ ok: false, error: 'Title and at least 2 options required' });
+  }
+
+  // Generate temporary poll for immediate UI update
+  const tempPoll = {
+    id: 'temp_' + Date.now(),
+    ...payload,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    status: 'active',
+    votes: payload.options.map(() => 0),
+    vote_count: 0,
+    pending: true
+  };
+
+  // Submit in background
+  setTimeout(async () => {
+    try {
+      const res = await createPoll(token, payload);
+      
+      if (res?.ok && res.poll) {
+        window.dispatchEvent(new CustomEvent('pollCreated', { 
+          detail: { tempId: tempPoll.id, realPoll: res.poll }
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('pollCreationFailed', { 
+          detail: { tempId: tempPoll.id, error: res?.error }
+        }));
+      }
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent('pollCreationFailed', { 
+        detail: { tempId: tempPoll.id, error: error.message }
+      }));
+    }
+  }, 100);
+
+  return Promise.resolve({ ok: true, poll: tempPoll });
+}
+
+// Background sync for polls
+let backgroundSyncInterval = null;
+
+export function startBackgroundSync(token) {
+  if (backgroundSyncInterval) {
+    clearInterval(backgroundSyncInterval);
+  }
+  
+  console.log('Starting background sync every 10 minutes');
+  
+  backgroundSyncInterval = setInterval(async () => {
+    try {
+      console.log('Background sync: Fetching latest polls...');
+      const res = await withRetry(() => get('polls/mine', { token }));
+      
+      if (res?.ok && res.polls) {
+        // Update cache
+        const cacheData = {
+          data: res.polls,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('user_polls_cache', JSON.stringify(cacheData));
+        
+        // Cache individual polls
+        res.polls.forEach(poll => {
+          setCachedPoll(poll.id, poll);
+        });
+        
+        console.log('Background sync: Updated cache with', res.polls.length, 'polls');
+        
+        // Emit event for UI update
+        window.dispatchEvent(new CustomEvent('pollsUpdated', { 
+          detail: { polls: res.polls, source: 'background' }
+        }));
+        
+      } else {
+        console.error('Background sync failed:', res?.error);
+      }
+    } catch (error) {
+      console.error('Background sync error:', error);
+    }
+  }, BACKGROUND_SYNC_INTERVAL);
+}
+
+export function stopBackgroundSync() {
+  if (backgroundSyncInterval) {
+    clearInterval(backgroundSyncInterval);
+    backgroundSyncInterval = null;
+    console.log('Stopped background sync');
   }
 }
