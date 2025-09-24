@@ -5,7 +5,7 @@ import PollList from "./components/PollList.jsx";
 import PollCreatedSuccess from "./components/PollCreatedSuccess.jsx";
 import ShareModal from "./components/ShareModal.jsx";
 import AuthPage from "./auth/AuthPage.jsx";
-import { myPolls, createPoll, updatePollStatus, permanentlyDeletePoll } from "./api.js";
+import { myPolls, createPoll, updatePollStatus, permanentlyDeletePoll, startBackgroundSync, stopBackgroundSync } from "./api.js";
 import PollResults from "./components/PollResults.jsx";
 import PublicPollVote from "./components/PublicPollVote.jsx";
 
@@ -43,7 +43,7 @@ export default function App() {
     setAuthLoaded(true);
   }, []);
 
-  // Load polls from remote only
+  // Load polls from remote with caching
   useEffect(() => {
     if (!auth) return;
     
@@ -57,7 +57,7 @@ export default function App() {
         console.log("Polls response:", res);
         
         if (res?.ok) {
-          console.log("Setting polls:", res.polls);
+          console.log("Setting polls from cache/API:", res.polls?.length || 0, "polls");
           setPolls(res.polls || []);
         } else {
           console.error("Failed to load polls:", res?.error);
@@ -141,103 +141,71 @@ export default function App() {
 
   const activePoll = polls.find(p => p.id === activeId) || null;
 
+  // Optimistic poll creation - add temp poll immediately, save in background
   const addPoll = async (pollData) => {
     setError("");
     setLoading(true);
     
     try {
-      console.log("Creating poll with data:", pollData);
-      
-      const res = await createPoll(auth.token, pollData);
-      console.log("API response:", res);
-      
-      if (res?.ok) {
-        // Success case - poll was created
-        if (res.poll) {
-          // Response includes the poll data
-          const newPoll = res.poll;
-          setPolls(prev => [...prev, newPoll]);
-          setActiveId(newPoll.id);
-          setShowSuccess(true);
-          setIsNewlyCreated(true);
-          console.log("Poll created successfully with data:", newPoll);
-        } else {
-          // Poll was created but no poll data returned - reload polls
-          console.log("Poll created successfully, reloading polls...");
-          const pollsRes = await myPolls(auth.token);
-          if (pollsRes?.ok) {
-            setPolls(pollsRes.polls || []);
-            // Find the most recently created poll (highest created_at)
-            const latestPoll = (pollsRes.polls || []).reduce((latest, poll) => 
-              (!latest || poll.created_at > latest.created_at) ? poll : latest, null);
-            if (latestPoll) {
-              setActiveId(latestPoll.id);
-              setShowSuccess(true);
-              setIsNewlyCreated(true);
-            }
-          }
-        }
-      } else {
-        // Check if poll might have been created despite error response
-        console.log("API returned error, but checking if poll was created...");
-        const pollsRes = await myPolls(auth.token);
-        if (pollsRes?.ok) {
-          const currentPollCount = polls.length;
-          const newPollCount = (pollsRes.polls || []).length;
+      // Create temporary poll for immediate UI update
+      const tempPoll = {
+        id: 'temp_' + Date.now(),
+        ...pollData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        status: 'active',
+        votes: pollData.options.map(() => 0),
+        vote_count: 0,
+        pending: true
+      };
+
+      // Add temp poll to UI immediately
+      setPolls(prev => [tempPoll, ...prev]);
+      setActiveId(tempPoll.id);
+      setShowSuccess(true);
+      setIsNewlyCreated(true);
+      setLoading(false);
+
+      // Submit in background
+      setTimeout(async () => {
+        try {
+          const res = await createPoll(auth.token, pollData);
           
-          if (newPollCount > currentPollCount) {
-            // A new poll was created despite the error
-            console.log("Poll was actually created despite error response");
-            setPolls(pollsRes.polls || []);
-            const latestPoll = (pollsRes.polls || []).reduce((latest, poll) => 
-              (!latest || poll.created_at > latest.created_at) ? poll : latest, null);
-            if (latestPoll) {
-              setActiveId(latestPoll.id);
-              setShowSuccess(true);
-              setIsNewlyCreated(true);
+          if (res?.ok && res.poll) {
+            // Replace temp poll with real poll
+            setPolls(prev => prev.map(p => 
+              p.id === tempPoll.id ? { ...res.poll, pending: false } : p
+            ));
+            
+            // Update active poll if it's the temp one
+            if (activeId === tempPoll.id) {
+              setActiveId(res.poll.id);
             }
           } else {
-            // Poll was not created
-            const errorMsg = res?.error || "Failed to create poll";
-            setError(`Error: ${errorMsg}`);
-            console.error("Poll creation failed:", errorMsg);
-          }
-        } else {
-          // Can't verify, show error
-          const errorMsg = res?.error || "Failed to create poll";
-          setError(`Error: ${errorMsg}`);
-          console.error("Poll creation failed:", errorMsg);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to create poll:", error);
-      
-      // Even on network error, check if poll was created
-      try {
-        const pollsRes = await myPolls(auth.token);
-        if (pollsRes?.ok) {
-          const currentPollCount = polls.length;
-          const newPollCount = (pollsRes.polls || []).length;
-          
-          if (newPollCount > currentPollCount) {
-            console.log("Poll was created despite network error");
-            setPolls(pollsRes.polls || []);
-            const latestPoll = (pollsRes.polls || []).reduce((latest, poll) => 
-              (!latest || poll.created_at > latest.created_at) ? poll : latest, null);
-            if (latestPoll) {
-              setActiveId(latestPoll.id);
-              setShowSuccess(true);
-              setIsNewlyCreated(true);
-              return; // Exit early, don't show error
+            // Remove temp poll on failure
+            setPolls(prev => prev.filter(p => p.id !== tempPoll.id));
+            setError(`Failed to create poll: ${res?.error}`);
+            
+            // Close success view if temp poll was active
+            if (activeId === tempPoll.id) {
+              setActiveId(null);
+              setShowSuccess(false);
             }
           }
+        } catch (error) {
+          // Remove temp poll on error
+          setPolls(prev => prev.filter(p => p.id !== tempPoll.id));
+          setError(`Error creating poll: ${error.message}`);
+          
+          if (activeId === tempPoll.id) {
+            setActiveId(null);
+            setShowSuccess(false);
+          }
         }
-      } catch (checkError) {
-        console.error("Failed to verify poll creation:", checkError);
-      }
-      
+      }, 100);
+
+    } catch (error) {
       setError(`Error: ${error.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -347,6 +315,31 @@ export default function App() {
     // Default: show create form
     return <CreatePollForm onCreate={addPoll} loading={loading} />;
   };
+
+  // Add background sync effect
+  useEffect(() => {
+    if (!auth?.token) return;
+    
+    // Start background sync
+    startBackgroundSync(auth.token);
+    
+    // Listen for background poll updates
+    const handlePollsUpdated = (event) => {
+      const { polls: updatedPolls, source } = event.detail;
+      if (source === 'background') {
+        console.log('Background sync: Updating polls in UI');
+        setPolls(updatedPolls);
+      }
+    };
+    
+    window.addEventListener('pollsUpdated', handlePollsUpdated);
+    
+    // Cleanup
+    return () => {
+      stopBackgroundSync();
+      window.removeEventListener('pollsUpdated', handlePollsUpdated);
+    };
+  }, [auth?.token]);
 
   return (
     <div className="max-w-5xl mx-auto px-4">
