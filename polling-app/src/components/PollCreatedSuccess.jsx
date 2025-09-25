@@ -1,10 +1,21 @@
 import { useState } from "react";
+import { CheckIcon, ClipboardIcon, ShareIcon, EyeIcon } from "./icons.jsx";
 
 export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewlyCreated = false }) {
   const [copied, setCopied] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
   const isSaving = Boolean(poll.pending);
   
   const pollUrl = `${window.location.origin}/?poll=${poll.id}`;
+  const title = (poll.title || '').trim() || 'Untitled Poll';
+  const description = (poll.description || '').trim();
+  const helperMessage = isSaving
+    ? "Hang tight! We're saving your poll. You can share it once it's ready."
+    : isNewlyCreated
+      ? "Share your poll link to start collecting votes."
+      : !description
+        ? "Share your poll link to collect more votes."
+        : '';
   
   // Handle votes - convert object to array if needed
   let totalVotes = 0;
@@ -59,24 +70,38 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
       <div className="space-y-2">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">
-            {isNewlyCreated ? "Poll Created!" : poll.title}
+            {title}
           </h1>
           <span className={`${isSaving ? 'bg-yellow-400 text-black' : 'bg-green-500 text-white'} text-xs px-2 py-1 rounded-full`}>
             {isSaving ? 'Saving...' : 'Active'}
           </span>
         </div>
-        <p className="text-muted">
-          {isSaving
-            ? "Hang tight! We're saving your poll. You can share it once it's ready."
-            : (isNewlyCreated
-                ? "Share your poll link to start collecting votes."
-                : poll.description || "Share your poll link to collect more votes.")}
-        </p>
+        {description && (
+          <p className="text-muted">{description}</p>
+        )}
+        {helperMessage && (
+          <p className="text-muted">{helperMessage}</p>
+        )}
       </div>
 
       {/* Poll Preview */}
       <div className="card p-4 bg-card/50">
-        <h3 className="text-lg font-medium mb-3">{poll.title}</h3>
+        {/* <h3 className="text-lg font-medium mb-3">{title}</h3> */}
+        {poll.image && (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => setPreviewImage({ src: poll.image, alt: title })}
+              className="block w-full"
+            >
+              <img
+                src={poll.image}
+                alt={title}
+                className="w-full max-h-60 object-cover rounded-lg border border-gray-700 hover:opacity-90"
+              />
+            </button>
+          </div>
+        )}
         
         <div className="space-y-2">
           <p className="text-sm text-muted">Options:</p>
@@ -107,7 +132,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
             title="Copy link"
             disabled={isSaving}
           >
-            {copied ? '✓' : '📋'}
+            {copied ? <CheckIcon className="h-4 w-4" /> : <ClipboardIcon className="h-4 w-4" />}
           </button>
         </div>
 
@@ -116,7 +141,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
           className="btn btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isSaving}
         >
-          <span>🔗</span>
+          <ShareIcon className="h-4 w-4" />
           Share Poll
         </button>
 
@@ -125,7 +150,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
           className="btn btn-ghost w-full disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isSaving}
         >
-          📋 Copy Link
+          Copy Link
         </button>
       </div>
 
@@ -147,7 +172,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
         className="btn btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isSaving}
       >
-        <span>👁</span>
+        <EyeIcon className="h-4 w-4" />
         View Results
       </button>
 
@@ -156,6 +181,20 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
           ? "Your poll will appear shortly. This page will refresh automatically once it's ready."
           : "Your poll is now live and accepting votes. You can view real-time results anytime."}
       </p>
+
+      {previewImage && (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6"
+          onClick={() => setPreviewImage(null)}
+        >
+          <img
+            src={previewImage.src}
+            alt={previewImage.alt}
+            className="max-h-[90vh] max-w-full object-contain rounded-lg border border-gray-700"
+          />
+        </button>
+      )}
     </div>
   );
 }

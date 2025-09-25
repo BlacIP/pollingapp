@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { ImagePlusIcon } from "../icons.jsx";
 
 /**
  * Props:
@@ -59,8 +60,8 @@ export default function DescriptionImage({
               className="hidden"
               onChange={onFile}
             />
-            <button type="button" className="btn btn-primary" onClick={pickImage}>
-              <span className="mr-2">🖼️</span> Add image
+            <button type="button" className="btn btn-primary flex items-center" onClick={pickImage}>
+              <ImagePlusIcon className="mr-2 h-4 w-4" /> Add image
             </button>
 
             {image && (

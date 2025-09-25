@@ -1,8 +1,19 @@
 import { useState } from 'react';
+import {
+  ArchiveIcon,
+  CheckCircleIcon,
+  EyeIcon,
+  PauseIcon,
+  RotateCcwIcon,
+  ShareIcon,
+  SkullIcon,
+  TrashIcon
+} from './icons.jsx';
 import { POLL_STATUS, STATUS_LABELS, STATUS_COLORS, getAvailableActions, getActionLabel } from '../utils/pollStatus.js';
 
 export default function PollList({ polls, onOpen, activePollId, loading, onViewResults, onShare, onDelete, onStatusChange }) {
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
 
   if (loading) {
     return (
@@ -77,6 +88,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
           const isMenuOpen = openMenuId === pollId;
           const status = poll.status || POLL_STATUS.ACTIVE;
           const availableActions = poll.pending ? [] : getAvailableActions(status);
+          const isDeleting = poll.pendingAction === POLL_STATUS.DELETED || poll.pendingAction === 'permanent_delete';
           
           let totalVotes = 0;
           if (Array.isArray(poll.votes)) {
@@ -115,20 +127,20 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                           onClick={(e) => handleMenuAction(e, 'view', poll)}
                           className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 flex items-center gap-2 text-sm"
                         >
-                          <span>👁</span>
+                          <EyeIcon className="h-4 w-4" />
                           View Results
                         </button>
                         <button
                           onClick={(e) => handleMenuAction(e, 'share', poll)}
                           className="w-full px-3 py-2 text-left text-white hover:bg-gray-700 flex items-center gap-2 text-sm"
                         >
-                          <span>🔗</span>
+                          <ShareIcon className="h-4 w-4" />
                           Share Poll
                         </button>
                         <div className="border-t border-gray-600 my-1"></div>
                       </>
                     )}
-                    
+
                     {availableActions.map(action => (
                       <button
                         key={action}
@@ -138,12 +150,12 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                         }`}
                       >
                         <span>
-                          {action === 'activate' && '✅'}
-                          {action === 'disable' && '⏸'}
-                          {action === 'archive' && '📦'}
-                          {action === 'delete' && '🗑'}
-                          {action === 'restore' && '♻️'}
-                          {action === 'permanent_delete' && '💀'}
+                          {action === 'activate' && <CheckCircleIcon className="h-4 w-4" />}
+                          {action === 'disable' && <PauseIcon className="h-4 w-4" />}
+                          {action === 'archive' && <ArchiveIcon className="h-4 w-4" />}
+                          {action === 'delete' && <TrashIcon className="h-4 w-4" />}
+                          {action === 'restore' && <RotateCcwIcon className="h-4 w-4" />}
+                          {action === 'permanent_delete' && <SkullIcon className="h-4 w-4" />}
                         </span>
                         {getActionLabel(action)}
                       </button>
@@ -161,7 +173,32 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                   <span className="text-yellow-400 text-sm ml-2">(Saving...)</span>
                 )}
               </h4>
-              
+
+              {poll.description && (
+                <p className="text-gray-400 text-sm mb-3 max-h-[3.5rem] overflow-hidden">
+                  {poll.description}
+                </p>
+              )}
+
+              {poll.image && (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewImage({ src: poll.image, alt: poll.title || 'Poll illustration' });
+                    }}
+                    className="block w-full"
+                  >
+                    <img
+                      src={poll.image}
+                      alt={poll.title || 'Poll illustration'}
+                      className="w-full max-h-32 object-cover rounded-lg border border-gray-700 hover:opacity-90"
+                    />
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-gray-400 text-sm">
@@ -174,8 +211,14 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                   )}
                 </div>
                 
-                <span className={`px-2 py-1 rounded text-xs font-medium ${poll.pending ? 'bg-yellow-400 text-black' : STATUS_COLORS[status]}`}>
-                  {poll.pending ? 'Saving...' : STATUS_LABELS[status]}
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  isDeleting
+                    ? 'bg-red-500 text-white'
+                    : poll.pending
+                      ? 'bg-yellow-400 text-black'
+                      : STATUS_COLORS[status]
+                }`}>
+                  {isDeleting ? 'Deleting...' : poll.pending ? 'Saving...' : STATUS_LABELS[status]}
                 </span>
               </div>
             </div>
@@ -188,6 +231,19 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
           className="fixed inset-0 z-5" 
           onClick={() => setOpenMenuId(null)}
         />
+      )}
+      {previewImage && (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-6"
+          onClick={() => setPreviewImage(null)}
+        >
+          <img
+            src={previewImage.src}
+            alt={previewImage.alt}
+            className="max-h-[90vh] max-w-full object-contain rounded-lg border border-gray-700"
+          />
+        </button>
       )}
     </div>
   );

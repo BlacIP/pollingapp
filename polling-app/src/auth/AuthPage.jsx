@@ -100,6 +100,11 @@ export default function AuthPage({ onSignedIn }) {
 
   return (
     <div className="max-w-md mx-auto card p-5 mt-10">
+      <div className="flex justify-center mb-4">
+        <span className="inline-flex items-center text-primary font-bold text-2xl tracking-tight" aria-label="uPoll.com brand">
+          uPoll.com
+        </span>
+      </div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl">{mode === 'signin' ? 'Sign In' : 'Sign Up'}</h2>
         <button

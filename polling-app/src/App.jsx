@@ -183,6 +183,7 @@ export default function App() {
       ...pollData,
       id: tempId,
       pending: true,
+      pendingAction: null,
       status: 'active',
       created_at: pollData.created_at || now,
       updated_at: pollData.updated_at || now,
@@ -207,7 +208,7 @@ export default function App() {
       if (res?.ok && res.poll) {
         setPolls(prev => {
           const updated = prev.map(poll =>
-            poll.id === tempId ? { ...res.poll, pending: false } : poll
+            poll.id === tempId ? { ...res.poll, pending: false, pendingAction: null } : poll
           );
           setUserPollsCache(updated);
           return updated;
@@ -243,6 +244,21 @@ export default function App() {
 
 
   const handleStatusChange = async (pollId, newStatus) => {
+    const previousPolls = polls.map(p => ({ ...p }));
+    setPolls(prev => {
+      const updated = prev.map(poll =>
+        poll.id === pollId
+          ? {
+              ...poll,
+              pending: true,
+              pendingAction: newStatus
+            }
+          : poll
+      );
+      setUserPollsCache(updated);
+      return updated;
+    });
+
     try {
       const res = await updatePollStatus(auth.token, pollId, newStatus);
       if (res?.ok) {
@@ -253,7 +269,11 @@ export default function App() {
               ? { 
                   ...poll, 
                   status: newStatus,
-                  ...(newStatus === 'deleted' ? { deleted_at: new Date().toISOString() } : {})
+                  pending: false,
+                  pendingAction: null,
+                  ...(newStatus === 'deleted'
+                    ? { deleted_at: new Date().toISOString() }
+                    : { deleted_at: newStatus === 'active' ? null : poll.deleted_at })
                 }
               : poll
           );
@@ -270,12 +290,25 @@ export default function App() {
         setError(res?.error || 'Failed to update poll status');
       }
     } catch (err) {
+      setPolls(previousPolls);
+      setUserPollsCache(previousPolls);
       setError('Failed to update poll status');
     }
   };
 
   const deletePollLocal = async (pollId, permanent = false) => {
+    const previousPolls = polls.map(p => ({ ...p }));
     if (permanent) {
+      setPolls(prev => {
+        const updated = prev.map(poll =>
+          poll.id === pollId
+            ? { ...poll, pending: true, pendingAction: 'permanent_delete' }
+            : poll
+        );
+        setUserPollsCache(updated);
+        return updated;
+      });
+
       try {
         const res = await permanentlyDeletePoll(auth.token, pollId);
         if (res?.ok) {
@@ -289,9 +322,13 @@ export default function App() {
             setShowSuccess(false);
           }
         } else {
+          setPolls(previousPolls);
+          setUserPollsCache(previousPolls);
           setError(res?.error || 'Failed to delete poll permanently');
         }
       } catch (err) {
+        setPolls(previousPolls);
+        setUserPollsCache(previousPolls);
         setError('Failed to delete poll permanently');
       }
     } else {
@@ -357,19 +394,29 @@ export default function App() {
 
   return (
     <div className="max-w-5xl mx-auto px-4">
-      <header className="my-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-semibold">
-            {showResults ? activePoll?.title : showSuccess ? (isNewlyCreated ? "Poll Created!" : activePoll?.title) : "Create a Poll"}
-          </h1>
-          <p className="text-muted -mt-1">
+      <header className="my-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center text-primary font-bold text-2xl tracking-tight" aria-label="uPoll.com brand">
+              uPoll.com
+            </span>
+            {/* <h1 className="text-3xl font-semibold">
+              {showResults
+                ? activePoll?.title || 'Poll Results'
+                : showSuccess
+                  ? (isNewlyCreated ? 'Poll Created!' : activePoll?.title || 'Saved Poll')
+                  : 'Create a Poll'}
+            </h1> */}
+          </div>
+          {/* <p className="text-muted max-w-2xl">
             {showResults 
-              ? "View detailed poll results and analytics"
+              ? 'View detailed poll results and analytics.'
               : showSuccess 
-                ? (isNewlyCreated ? "Share your poll link to start collecting votes" : (activePoll?.description || "Share your poll link to collect more votes"))
-                : "Complete the fields below to create your poll"
-            }
-          </p>
+                ? (isNewlyCreated
+                    ? 'Share your poll link to start collecting votes.'
+                    : activePoll?.description || 'Share your poll link to collect more votes.')
+                : 'Complete the fields below to create your poll.'}
+          </p> */}
         </div>
         <div className="flex items-center gap-4">
           <span className="text-muted">Welcome, {auth.user.name || auth.user.email}</span>
@@ -381,12 +428,12 @@ export default function App() {
 
       {error && <div className="card p-3 mb-4 text-red-400">{error}</div>}
 
-      <main className="grid gap-4 md:grid-cols-[2fr_1fr]">
-        <section className="card p-5">
+      <main className="grid gap-6 md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
+        <section className="card p-6">
           {renderMainContent()}
         </section>
 
-        <aside className="card p-5 h-fit">
+        <aside className="card p-6 h-fit">
           <PollList 
             polls={polls} 
             onOpen={handleOpenPoll} 

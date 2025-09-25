@@ -1,4 +1,12 @@
 import { useState } from "react";
+import {
+  BarChartIcon,
+  UsersIcon,
+  CalendarIcon,
+  StarIcon,
+  ShareIcon,
+  DownloadIcon
+} from "./icons.jsx";
 
 export default function PollResults({ poll, onBack, onShare }) {
   const [copied, setCopied] = useState(false);
@@ -84,7 +92,7 @@ export default function PollResults({ poll, onBack, onShare }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center gap-2 text-blue-400 mb-1">
-            <span>📊</span>
+            <BarChartIcon className="h-5 w-5" />
             <span className="text-2xl font-bold">{totalVotes}</span>
           </div>
           <div className="text-sm text-muted">Total Votes</div>
@@ -92,7 +100,7 @@ export default function PollResults({ poll, onBack, onShare }) {
         
         <div className="bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center gap-2 text-green-400 mb-1">
-            <span>👥</span>
+            <UsersIcon className="h-5 w-5" />
             <span className="text-2xl font-bold">{participants}</span>
           </div>
           <div className="text-sm text-muted">Participants</div>
@@ -100,14 +108,17 @@ export default function PollResults({ poll, onBack, onShare }) {
         
         <div className="bg-gray-700/50 rounded-lg p-4">
           <div className="flex items-center gap-2 text-purple-400 mb-1">
-            <span>📅</span>
+            <CalendarIcon className="h-5 w-5" />
             <span className="text-lg font-bold">{createdDate}</span>
           </div>
           <div className="text-sm text-muted">Created</div>
         </div>
         
         <div className="bg-gray-700/50 rounded-lg p-4">
-          <div className="text-lg font-bold text-white mb-1">{mostPopular}</div>
+          <div className="flex items-center gap-2 text-white mb-1">
+            <StarIcon className="h-5 w-5 text-yellow-400" />
+            <span className="text-lg font-bold">{mostPopular}</span>
+          </div>
           <div className="text-sm text-muted">Most Popular</div>
         </div>
       </div>
@@ -158,7 +169,7 @@ export default function PollResults({ poll, onBack, onShare }) {
           onClick={onShare}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          <span>🔗</span>
+          <ShareIcon className="h-4 w-4" />
           Share Poll
         </button>
         
@@ -166,7 +177,7 @@ export default function PollResults({ poll, onBack, onShare }) {
           onClick={exportCSV}
           className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          <span>📊</span>
+          <DownloadIcon className="h-4 w-4" />
           Export Results
         </button>
       </div>

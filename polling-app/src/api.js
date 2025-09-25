@@ -189,6 +189,14 @@ function setCachedPoll(pollId, pollData) {
   }
 }
 
+export function clearCachedPoll(pollId) {
+  try {
+    localStorage.removeItem(CACHE_PREFIX + pollId);
+  } catch (error) {
+    console.error('Cache clear error:', error);
+  }
+}
+
 // Add caching for user's polls
 export function myPolls(token) {
   if (!token) {

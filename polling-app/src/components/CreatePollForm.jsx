@@ -60,6 +60,7 @@ export default function CreatePollForm({ onCreate, loading }) {
   };
 
   return (
+    
     <div className="space-y-6">
       {/* Header */}
       <div className="space-y-2">
