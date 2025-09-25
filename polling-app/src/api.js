@@ -1,4 +1,4 @@
-export const BASE_URL = 'https://script.google.com/macros/s/AKfycbzvA4qff5VfzEm0H75oyOjLE-qZ1Y5zWgpQch1jtiNYZqmAlSgIiaFR9FmuLyrNKTlL/exec';
+export const BASE_URL = 'https://script.google.com/macros/s/AKfycbz6Iju-W9f9Qi_ltFaSSawhwfUdPRb-yQZ1fTdUtNgRjv3rE5K5VLUH7Ins_DwiQd0/exec';
 
 // Error logging helper
 function logApiError(endpoint, error) {
@@ -158,6 +158,9 @@ export function checkAuth(token) {
 const CACHE_PREFIX = 'poll_cache_';
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 const BACKGROUND_SYNC_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const POLLS_CACHE_KEY = 'user_polls_cache';
+const LOGOUT_FLAG_KEY = 'auth_logged_out';
 
 function getCachedPoll(pollId) {
   try {
@@ -193,7 +196,6 @@ export function myPolls(token) {
   }
   
   // Check cache first
-  const POLLS_CACHE_KEY = 'user_polls_cache';
   try {
     const cached = localStorage.getItem(POLLS_CACHE_KEY);
     if (cached) {
@@ -213,11 +215,7 @@ export function myPolls(token) {
       if (result.ok && result.polls) {
         try {
           // Cache user's polls
-          const cacheData = {
-            data: result.polls,
-            timestamp: Date.now()
-          };
-          localStorage.setItem(POLLS_CACHE_KEY, JSON.stringify(cacheData));
+          setUserPollsCache(result.polls);
           console.log('Cached user polls:', result.polls.length);
           
           // Also cache individual polls
@@ -235,10 +233,35 @@ export function myPolls(token) {
 // Clear user polls cache when needed
 export function clearUserPollsCache() {
   try {
-    localStorage.removeItem('user_polls_cache');
-    console.log('Cleared user polls cache');
+    localStorage.removeItem(POLLS_CACHE_KEY);
+
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(CACHE_PREFIX)) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+    console.log(
+      `Cleared user polls cache${keysToRemove.length ? ' and ' + keysToRemove.length + ' cached poll(s)' : ''}`
+    );
   } catch (error) {
     console.error('Failed to clear user polls cache:', error);
+  }
+}
+
+export function setUserPollsCache(polls) {
+  try {
+    const cacheData = {
+      data: polls,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(POLLS_CACHE_KEY, JSON.stringify(cacheData));
+  } catch (error) {
+    console.error('Failed to set user polls cache:', error);
   }
 }
 
@@ -390,9 +413,23 @@ export function getStoredAuth() {
   try {
     const token = localStorage.getItem('auth_token');
     const user = localStorage.getItem('auth_user');
-    if (token && user) {
-      return { token, user: JSON.parse(user) };
+    const loginTime = localStorage.getItem('auth_login_time');
+    const loggedOut = localStorage.getItem(LOGOUT_FLAG_KEY) === '1';
+
+    if (!token || !user || !loginTime) {
+      return null;
     }
+
+    const loginTimestamp = parseInt(loginTime, 10);
+    const isExpired =
+      Number.isNaN(loginTimestamp) || Date.now() - loginTimestamp > SESSION_DURATION;
+
+    if (isExpired) {
+      clearAuth();
+      return null;
+    }
+
+    return { token, user: JSON.parse(user), loggedOut };
   } catch (error) {
     console.error('Error reading stored auth:', error);
   }
@@ -403,6 +440,8 @@ export function storeAuth(token, user) {
   try {
     localStorage.setItem('auth_token', token);
     localStorage.setItem('auth_user', JSON.stringify(user));
+    localStorage.setItem('auth_login_time', Date.now().toString());
+    localStorage.removeItem(LOGOUT_FLAG_KEY);
   } catch (error) {
     console.error('Error storing auth:', error);
   }
@@ -412,8 +451,26 @@ export function clearAuth() {
   try {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_login_time');
+    localStorage.removeItem(LOGOUT_FLAG_KEY);
   } catch (error) {
     console.error('Error clearing auth:', error);
+  }
+}
+
+export function markAuthLoggedOut() {
+  try {
+    localStorage.setItem(LOGOUT_FLAG_KEY, '1');
+  } catch (error) {
+    console.error('Error marking auth as logged out:', error);
+  }
+}
+
+export function clearAuthLogoutMarker() {
+  try {
+    localStorage.removeItem(LOGOUT_FLAG_KEY);
+  } catch (error) {
+    console.error('Error clearing auth logout marker:', error);
   }
 }
 

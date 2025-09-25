@@ -23,6 +23,10 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
 
   const handleMenuClick = (e, pollId) => {
     e.stopPropagation();
+    const target = polls.find(p => p.id === pollId);
+    if (target?.pending) {
+      return;
+    }
     setOpenMenuId(openMenuId === pollId ? null : pollId);
   };
 
@@ -72,7 +76,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
           const isActive = pollId === activePollId;
           const isMenuOpen = openMenuId === pollId;
           const status = poll.status || POLL_STATUS.ACTIVE;
-          const availableActions = getAvailableActions(status);
+          const availableActions = poll.pending ? [] : getAvailableActions(status);
           
           let totalVotes = 0;
           if (Array.isArray(poll.votes)) {
@@ -105,7 +109,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                 
                 {isMenuOpen && (
                   <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 min-w-[160px] z-10">
-                    {status !== POLL_STATUS.DELETED && (
+                    {!poll.pending && status !== POLL_STATUS.DELETED && (
                       <>
                         <button
                           onClick={(e) => handleMenuAction(e, 'view', poll)}
@@ -170,8 +174,8 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                   )}
                 </div>
                 
-                <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_COLORS[status]}`}>
-                  {STATUS_LABELS[status]}
+                <span className={`px-2 py-1 rounded text-xs font-medium ${poll.pending ? 'bg-yellow-400 text-black' : STATUS_COLORS[status]}`}>
+                  {poll.pending ? 'Saving...' : STATUS_LABELS[status]}
                 </span>
               </div>
             </div>

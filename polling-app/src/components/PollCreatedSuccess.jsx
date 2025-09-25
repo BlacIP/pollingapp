@@ -2,6 +2,7 @@ import { useState } from "react";
 
 export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewlyCreated = false }) {
   const [copied, setCopied] = useState(false);
+  const isSaving = Boolean(poll.pending);
   
   const pollUrl = `${window.location.origin}/?poll=${poll.id}`;
   
@@ -16,6 +17,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
   const participants = totalVotes;
 
   const copyToClipboard = async () => {
+    if (isSaving) return;
     try {
       await navigator.clipboard.writeText(pollUrl);
       setCopied(true);
@@ -26,6 +28,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
   };
 
   const shareNative = async () => {
+    if (isSaving) return;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -58,15 +61,16 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
           <h1 className="text-2xl font-semibold">
             {isNewlyCreated ? "Poll Created!" : poll.title}
           </h1>
-          <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-            Active
+          <span className={`${isSaving ? 'bg-yellow-400 text-black' : 'bg-green-500 text-white'} text-xs px-2 py-1 rounded-full`}>
+            {isSaving ? 'Saving...' : 'Active'}
           </span>
         </div>
         <p className="text-muted">
-          {isNewlyCreated 
-            ? "Share your poll link to start collecting votes." 
-            : poll.description || "Share your poll link to collect more votes."
-          }
+          {isSaving
+            ? "Hang tight! We're saving your poll. You can share it once it's ready."
+            : (isNewlyCreated
+                ? "Share your poll link to start collecting votes."
+                : poll.description || "Share your poll link to collect more votes.")}
         </p>
       </div>
 
@@ -99,8 +103,9 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
           />
           <button
             onClick={copyToClipboard}
-            className="btn btn-ghost px-3"
+            className="btn btn-ghost px-3 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Copy link"
+            disabled={isSaving}
           >
             {copied ? '✓' : '📋'}
           </button>
@@ -108,7 +113,8 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
 
         <button
           onClick={shareNative}
-          className="btn btn-primary w-full flex items-center justify-center gap-2"
+          className="btn btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isSaving}
         >
           <span>🔗</span>
           Share Poll
@@ -116,7 +122,8 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
 
         <button
           onClick={copyToClipboard}
-          className="btn btn-ghost w-full"
+          className="btn btn-ghost w-full disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isSaving}
         >
           📋 Copy Link
         </button>
@@ -137,14 +144,17 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
       {/* View Results */}
       <button
         onClick={onViewResults}
-        className="btn btn-ghost w-full flex items-center justify-center gap-2"
+        className="btn btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isSaving}
       >
         <span>👁</span>
         View Results
       </button>
 
       <p className="text-sm text-muted text-center">
-        Your poll is now live and accepting votes. You can view real-time results anytime.
+        {isSaving
+          ? "Your poll will appear shortly. This page will refresh automatically once it's ready."
+          : "Your poll is now live and accepting votes. You can view real-time results anytime."}
       </p>
     </div>
   );
