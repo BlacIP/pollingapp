@@ -16,6 +16,17 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
       : !description
         ? "Share your poll link to collect more votes."
         : '';
+
+  const securityLabels = {
+    session: "One vote per browser session",
+    none: "No restrictions (multiple votes allowed)",
+    device: "One vote per device",
+    code: "One vote per unique code"
+  };
+
+  const closeLabel = poll.closeAt
+    ? new Date(poll.closeAt).toLocaleString()
+    : "No close time set";
   
   // Handle votes - convert object to array if needed
   let totalVotes = 0;
@@ -76,17 +87,19 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
             {isSaving ? 'Saving...' : 'Active'}
           </span>
         </div>
-        {description && (
-          <p className="text-muted">{description}</p>
-        )}
-        {helperMessage && (
-          <p className="text-muted">{helperMessage}</p>
+        {(description || helperMessage) && (
+          <div className="bg-card/40 rounded-lg space-y-2">
+            {description && <p className="text-muted whitespace-pre-wrap break-words">{description}</p>}
+            {helperMessage && <p className="text-muted">{helperMessage}</p>}
+          </div>
         )}
       </div>
 
       {/* Poll Preview */}
       <div className="card p-4 bg-card/50">
-        {/* <h3 className="text-lg font-medium mb-3">{title}</h3> */}
+        {/* {description && (
+          <p className="text-sm text-muted mb-3 whitespace-pre-wrap break-words">{description}</p>
+        )} */}
         {poll.image && (
           <div className="mb-3">
             <button
@@ -102,7 +115,6 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
             </button>
           </div>
         )}
-        
         <div className="space-y-2">
           <p className="text-sm text-muted">Options:</p>
           <ol className="space-y-1">
@@ -113,6 +125,24 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
             ))}
           </ol>
         </div>
+      </div>
+
+      <div className="card p-4 bg-card/50">
+        <h3 className="text-sm text-muted mb-3">Poll Settings</h3>
+        <ul className="space-y-1 text-sm text-muted">
+          <li>
+            <span className="font-medium text-text">Selection:</span> {poll.type === 'multiple' ? 'Multiple selections allowed' : 'Single selection only'}
+          </li>
+          <li>
+            <span className="font-medium text-text">Participant name:</span> {poll.requireName ? 'Required' : 'Optional'}
+          </li>
+          <li>
+            <span className="font-medium text-text">Voting security:</span> {securityLabels[poll.security] || 'Standard restrictions'}
+          </li>
+          <li>
+            <span className="font-medium text-text">Close time:</span> {closeLabel}
+          </li>
+        </ul>
       </div>
 
       {/* Share Section */}

@@ -429,11 +429,11 @@ export default function App() {
       {error && <div className="card p-3 mb-4 text-red-400">{error}</div>}
 
       <main className="grid gap-6 md:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
-        <section className="card p-6">
+        <section className="card p-6 sticky top-6 self-start max-h-[calc(100vh-9rem)] overflow-y-auto">
           {renderMainContent()}
         </section>
 
-        <aside className="card p-6 h-fit">
+        <aside className="card p-6 h-[calc(100vh-9rem)] overflow-y-auto">
           <PollList 
             polls={polls} 
             onOpen={handleOpenPoll} 

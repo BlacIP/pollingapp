@@ -10,10 +10,12 @@ import {
   TrashIcon
 } from './icons.jsx';
 import { POLL_STATUS, STATUS_LABELS, STATUS_COLORS, getAvailableActions, getActionLabel } from '../utils/pollStatus.js';
+import ConfirmModal from './ConfirmModal.jsx';
 
 export default function PollList({ polls, onOpen, activePollId, loading, onViewResults, onShare, onDelete, onStatusChange }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   if (loading) {
     return (
@@ -44,7 +46,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
   const handleMenuAction = (e, action, poll) => {
     e.stopPropagation();
     setOpenMenuId(null);
-    
+
     switch (action) {
       case 'view':
         onViewResults(poll.id);
@@ -62,26 +64,39 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
         onStatusChange(poll.id, POLL_STATUS.ARCHIVED);
         break;
       case 'delete':
-        if (confirm(`Move "${poll.title}" to trash?`)) {
-          onStatusChange(poll.id, POLL_STATUS.DELETED);
-        }
+        setConfirmAction({
+          type: 'soft-delete',
+          poll
+        });
         break;
       case 'restore':
         onStatusChange(poll.id, POLL_STATUS.ACTIVE);
         break;
       case 'permanent_delete':
-        if (confirm(`Permanently delete "${poll.title}"? This cannot be undone.`)) {
-          onDelete(poll.id, true);
-        }
+        setConfirmAction({
+          type: 'hard-delete',
+          poll
+        });
         break;
     }
+  };
+
+  const handleConfirm = () => {
+    if (!confirmAction) return;
+    const { type, poll } = confirmAction;
+    if (type === 'soft-delete') {
+      onStatusChange(poll.id, POLL_STATUS.DELETED);
+    } else if (type === 'hard-delete') {
+      onDelete(poll.id, true);
+    }
+    setConfirmAction(null);
   };
 
   return (
     <div>
       <h3 className="text-lg font-medium mb-4 text-white">Saved Polls</h3>
       
-      <div className="space-y-3">
+      <div className="space-y-3 overflow-visible">
         {polls.map((poll) => {
           const pollId = poll.id;
           const isActive = pollId === activePollId;
@@ -103,7 +118,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
             <div
               key={pollId}
               onClick={() => status !== POLL_STATUS.DELETED && onOpen(pollId)}
-              className={`relative p-4 rounded-lg border transition-all ${
+              className={`relative p-4 rounded-lg border transition-all ${isMenuOpen ? 'z-50' : 'z-0'} ${
                 status === POLL_STATUS.DELETED 
                   ? 'border-red-600 bg-red-900/20 opacity-75' 
                   : isActive 
@@ -120,7 +135,7 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
                 </button>
                 
                 {isMenuOpen && (
-                  <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 min-w-[160px] z-10">
+                  <div className="absolute right-0 top-8 bg-gray-800 border border-gray-600 rounded-lg shadow-lg py-2 min-w-[160px] z-[999]">
                     {!poll.pending && status !== POLL_STATUS.DELETED && (
                       <>
                         <button
@@ -245,6 +260,20 @@ export default function PollList({ polls, onOpen, activePollId, loading, onViewR
           />
         </button>
       )}
+
+      <ConfirmModal
+        open={Boolean(confirmAction)}
+        title={confirmAction?.type === 'hard-delete' ? 'Delete poll permanently?' : 'Move poll to trash?'}
+        message={
+          confirmAction?.type === 'hard-delete'
+            ? `This will permanently delete "${confirmAction?.poll?.title}". This action cannot be undone.`
+            : `"${confirmAction?.poll?.title}" will be moved to trash.`
+        }
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

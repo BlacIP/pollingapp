@@ -314,7 +314,11 @@ export default function PublicPollVote({ pollId }) {
         </div>
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-white mb-3">{poll.title}</h1>
-          {poll.description && <p className="text-gray-400 mb-4">{poll.description}</p>}
+          {poll.description && (
+            <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-4 text-left mb-4 max-h-48 overflow-y-auto">
+              <p className="text-gray-300 whitespace-pre-wrap break-words text-sm">{poll.description}</p>
+            </div>
+          )}
           {poll.image && (
             <div className="mb-4">
               <button
