@@ -4,6 +4,7 @@ import TitleField from "./form/TitleField.jsx";
 import DescriptionImage from "./form/DescriptionImage.jsx";
 import OptionsEditor from "./form/OptionsEditor.jsx";
 import SecurityAndClose from "./form/SecurityAndClose.jsx";
+import { ValidationError, assert } from "../utils/errors.js";
 
 export default function CreatePollForm({ onCreate, loading }) {
   const [title, setTitle] = useState("");
@@ -11,6 +12,7 @@ export default function CreatePollForm({ onCreate, loading }) {
   const [image, setImage] = useState("");
   const [showDesc, setShowDesc] = useState(false);
   const [options, setOptions] = useState(["", ""]);
+  const [formError, setFormError] = useState("");
 
   // Settings
   const [allowMulti, setAllowMulti] = useState(false);
@@ -33,30 +35,41 @@ export default function CreatePollForm({ onCreate, loading }) {
 
   const submit = (e) => {
     e.preventDefault();
-    const clean = options.map(o => o.trim()).filter(Boolean);
-    
-    if (!title.trim()) {
-      alert("Please enter a poll title");
-      return;
-    }
-    if (clean.length < 2) {
-      alert("Please provide at least 2 answer options");
-      return;
-    }
+    setFormError("");
 
-    const poll = {
-      id: uid(),
-      title: title.trim(),
-      description: desc.trim(),
-      image,
-      type: allowMulti ? "multiple" : "single",
-      requireName,
-      security,
-      closeAt: enableClose ? closeAt : null,
-      options: clean.map(t => ({ id: uid(), text: t })),
-      votes: clean.map(() => 0),
-    };
-    onCreate(poll);
+    try {
+      const clean = options.map(o => o.trim()).filter(Boolean);
+
+      assert(title.trim(), "Please enter a poll title");
+      assert(clean.length >= 2, "Please provide at least 2 answer options");
+
+      if (enableClose) {
+        assert(closeAt, "Choose a close time or disable the close setting");
+      }
+
+      const poll = {
+        id: uid(),
+        title: title.trim(),
+        description: desc.trim(),
+        image,
+        type: allowMulti ? "multiple" : "single",
+        requireName,
+        security,
+        closeAt: enableClose ? closeAt : null,
+        options: clean.map(t => ({ id: uid(), text: t })),
+        votes: clean.map(() => 0),
+      };
+
+      onCreate(poll);
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        setFormError(err.message);
+        return;
+      }
+
+      console.error("Failed to create poll", err);
+      setFormError("Something went wrong while creating the poll. Please try again.");
+    }
   };
 
   return (
@@ -69,6 +82,12 @@ export default function CreatePollForm({ onCreate, loading }) {
       </div>
 
       <form onSubmit={submit} className="space-y-6">
+        {formError && (
+          <div className="bg-red-900/50 border border-red-500 text-red-100 px-4 py-3 rounded-lg">
+            {formError}
+          </div>
+        )}
+
         <TitleField title={title} onChange={setTitle} />
 
         <DescriptionImage
@@ -94,9 +113,9 @@ export default function CreatePollForm({ onCreate, loading }) {
           closeAt={closeAt} setCloseAt={setCloseAt}
         />
 
-        <div className="flex justify-end pt-4">
+        <div className="pt-4">
           <button 
-            className="btn btn-primary px-8" 
+            className="btn btn-primary w-full" 
             type="submit"
             disabled={loading}
           >

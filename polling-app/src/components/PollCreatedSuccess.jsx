@@ -1,4 +1,5 @@
 import { useState } from "react";
+import dayjs from "dayjs";
 import { CheckIcon, ClipboardIcon, ShareIcon, EyeIcon } from "./icons.jsx";
 
 export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewlyCreated = false }) {
@@ -25,7 +26,7 @@ export default function PollCreatedSuccess({ poll, onBack, onViewResults, isNewl
   };
 
   const closeLabel = poll.closeAt
-    ? new Date(poll.closeAt).toLocaleString()
+    ? dayjs(poll.closeAt).format("MMM D, YYYY h:mm A")
     : "No close time set";
   
   // Handle votes - convert object to array if needed

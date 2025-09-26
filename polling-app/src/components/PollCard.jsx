@@ -34,12 +34,25 @@ export default function PollCard({ poll, onUpdate, onDelete, onBack, onShare }) 
     if (selected.length === 0) return alert("Select an option.");
     if (poll.type === "single" && selected.length > 1) return alert("Select only one option.");
 
-    const scope = poll.security === "session" ? "session" : "none";
+    const scope = poll.security === "session"
+      ? "session"
+      : poll.security === "device"
+        ? "device"
+        : "none";
     const pollId = poll.id; // Use 'id' not 'poll_id'
     const key = `voted_${scope}_${pollId}`;
 
     if (scope === "session" && sessionStorage.getItem(key)) {
       return alert("You already voted in this browser session.");
+    }
+    if (scope === "device") {
+      try {
+        if (localStorage.getItem(key)) {
+          return alert("You already voted on this device.");
+        }
+      } catch (storageError) {
+        console.error("Device vote check failed", storageError);
+      }
     }
 
     // Update votes locally for immediate UI feedback
@@ -55,6 +68,13 @@ export default function PollCard({ poll, onUpdate, onDelete, onBack, onShare }) 
     onUpdate(updatedPoll);
 
     if (scope === "session") sessionStorage.setItem(key, "1");
+    if (scope === "device") {
+      try {
+        localStorage.setItem(key, "1");
+      } catch (storageError) {
+        console.error("Failed to persist device vote", storageError);
+      }
+    }
     alert("Vote successful");
   };
 

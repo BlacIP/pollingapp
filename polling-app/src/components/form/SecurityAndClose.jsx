@@ -5,6 +5,12 @@ export default function SecurityAndClose({
   enableClose, setEnableClose,
   closeAt, setCloseAt
 }) {
+  const securityNotes = {
+    none: "Participants can vote multiple times. Limited to 1,000 votes per poll.",
+    device: "Tracks device votes in localStorage so the same device cannot vote twice.",
+    session: "Uses sessionStorage to prevent repeat votes until the browser is closed."
+  };
+
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-medium">Settings</h3>
@@ -45,12 +51,13 @@ export default function SecurityAndClose({
               onChange={(e) => setSecurity(e.target.value)}
             >
               <option value="session">One vote per browser session</option>
+              <option value="device">One vote per device</option>
               <option value="none">No restrictions (multiple votes allowed)</option>
             </select>
           </div>
-          {security === "none" && (
+          {securityNotes[security] && (
             <p className="text-red-400 text-sm">
-              Participants can vote multiple times. Limited to 1,000 votes per poll.
+              {securityNotes[security]}
             </p>
           )}
         </div>

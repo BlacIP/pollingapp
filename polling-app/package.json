@@ -12,6 +12,8 @@
   "dependencies": {
     "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
+    "dayjs": "^1.11.18",
+    "lucide-react": "^0.462.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

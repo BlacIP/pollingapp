@@ -2,13 +2,43 @@
 const STORAGE_KEY = "pollingapp_polls_v2";
 const votedKey = (id, scope) => `voted_${scope}_${id}`;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-const read = () => JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+class ValidationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+const read = () => {
+  const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  return raw.map(normalizePoll);
+};
 const write = (v) => localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
 
 /* ---------- State ---------- */
 let polls = read();
 let active = null;
 let chart = null;
+
+function normalizePoll(poll) {
+  if (!poll) return poll;
+  const options = (poll.options || []).map((opt, idx) => normalizeOption(opt, Array.isArray(poll.votes) ? poll.votes[idx] : 0));
+  const votes = Array.isArray(poll.votes) ? poll.votes : options.map(opt => opt.votes || 0);
+  return { ...poll, options, votes };
+}
+
+function normalizeOption(option = {}, fallbackVotes = 0) {
+  const children = Array.isArray(option.children) ? option.children.map(child => normalizeOption(child, 0)) : [];
+  const votes = typeof option.votes === "number" ? option.votes : (typeof fallbackVotes === "number" ? fallbackVotes : 0);
+  return {
+    ...option,
+    id: option.id || uid(),
+    text: option.text || "",
+    votes,
+    children
+  };
+}
 
 /* ---------- DOM ---------- */
 const byId = (x) => document.getElementById(x);
@@ -56,6 +86,8 @@ const menu = byId("menu");
 const resetBtn = byId("reset-poll");
 const exportBtn = byId("export-poll");
 const deleteBtn = byId("delete-poll");
+const closeInfo = byId("close-info");
+const formError = byId("form-error");
 
 /* Share modal */
 const shareOpen = byId("share-open");
@@ -68,8 +100,95 @@ const shareWA = byId("share-whatsapp");
 const shareTW = byId("share-twitter");
 const shareFB = byId("share-facebook");
 const qrcodeBox = byId("qrcode");
+const nestedSummary = byId("nested-summary");
+const nestedTotal = byId("nested-total");
+const nestedTree = byId("nested-tree");
 
 /* ---------- Helpers ---------- */
+const formatDateTime = (value) => {
+  if (!value) return "";
+  try {
+    return dayjs(value).format("MMM D, YYYY h:mm A");
+  } catch (err) {
+    return new Date(value).toLocaleString();
+  }
+};
+
+function optionTotal(option) {
+  const own = option && typeof option.votes === "number" ? option.votes : 0;
+  const childTotal = option && Array.isArray(option.children) && option.children.length
+    ? tallyNested(option.children)
+    : 0;
+  return own + childTotal;
+}
+
+function tallyNested(options) {
+  return (options || []).reduce((sum, opt) => sum + optionTotal(opt), 0);
+}
+
+function renderOptionsTree(container, options) {
+  const list = document.createElement("ul");
+  list.className = "nested-list";
+
+  (options || []).forEach(option => {
+    const li = document.createElement("li");
+    const row = document.createElement("div");
+    row.className = "nested-row";
+
+    const label = document.createElement("span");
+    label.textContent = option.text;
+
+    const totalPill = document.createElement("span");
+    totalPill.className = "pill";
+    totalPill.textContent = optionTotal(option);
+
+    row.append(label, totalPill);
+    li.appendChild(row);
+
+    const meta = document.createElement("span");
+    meta.className = "nested-meta";
+    const directVotes = option && typeof option.votes === "number" ? option.votes : 0;
+    if (option.children && option.children.length) {
+      const count = option.children.length;
+      meta.textContent = `self ${directVotes} • ${count} sub option${count === 1 ? "" : "s"}`;
+    } else {
+      meta.textContent = `${directVotes} vote${directVotes === 1 ? "" : "s"}`;
+    }
+    li.appendChild(meta);
+
+    if (option.children && option.children.length) {
+      renderOptionsTree(li, option.children);
+    }
+
+    list.appendChild(li);
+  });
+
+  container.appendChild(list);
+}
+
+function renderNestedSummary() {
+  if (!nestedSummary) return;
+
+  nestedTree.innerHTML = "";
+  if (!active || !Array.isArray(active.options) || active.options.length === 0) {
+    nestedSummary.classList.add("hidden");
+    nestedTotal.textContent = "0";
+    return;
+  }
+
+  nestedSummary.classList.remove("hidden");
+  nestedTotal.textContent = tallyNested(active.options);
+  renderOptionsTree(nestedTree, active.options);
+}
+
+function resetOptionVotes(option) {
+  if (!option) return;
+  option.votes = 0;
+  if (Array.isArray(option.children)) {
+    option.children.forEach(resetOptionVotes);
+  }
+}
+
 function addOptionRow(value = "") {
   const row = document.createElement("div");
   row.className = "option-row";
@@ -126,29 +245,62 @@ pasteBtn.onclick = async () => {
 };
 
 createBtn.onclick = () => {
-  const title = titleEl.value.trim();
-  const options = getOptions().map(t => ({ id: uid(), text: t }));
-  if (!title) return alert("Title is required.");
-  if (options.length < 2) return alert("Add at least two options.");
-  const poll = {
-    id: uid(),
-    title,
-    description: descEl.value.trim() || "",
-    image: imgEl.value.trim() || "",
-    type: typeEl.value, // single|multiple
-    requireName: requireName.checked,
-    security: voteSecurity.value, // none|session|device|code
-    closeAt: closeAt.value || null,
-    options,
-    votes: options.map(()=>0),
-    codes: voteSecurity.value === "code" ? Array.from({length: 20}, ()=>uid().slice(0,6)) : [] // demo
-  };
-  polls.push(poll);
-  write(polls);
+  formError.classList.add("hidden");
+  formError.textContent = "";
 
-  // open just-created poll
-  openPoll(poll.id);
-  renderPollsList();
+  const title = titleEl.value.trim();
+  const optionNodes = getOptions().map(text => ({ id: uid(), text, votes: 0, children: [] }));
+
+  try {
+    if (!title) throw new ValidationError("Title is required.");
+    if (optionNodes.length < 2) throw new ValidationError("Add at least two options.");
+
+    const allHaveContent = optionNodes.every(opt => opt.text.trim().length > 0);
+    if (!allHaveContent) throw new ValidationError("Options cannot be blank.");
+
+    const hasDuplicate = optionNodes.some((opt, idx) =>
+      optionNodes.slice(idx + 1).some(other => other.text.trim().toLowerCase() === opt.text.trim().toLowerCase())
+    );
+    if (hasDuplicate) throw new ValidationError("Use unique option labels to avoid confusion.");
+
+    if (closeAt.value) {
+      const closeTime = dayjs(closeAt.value);
+      if (!closeTime.isValid()) {
+        throw new ValidationError("Close time must be a valid date and time.");
+      }
+      if (closeTime.isBefore(dayjs())) {
+        throw new ValidationError("Close time must be in the future.");
+      }
+    }
+
+    const poll = normalizePoll({
+      id: uid(),
+      title,
+      description: descEl.value.trim() || "",
+      image: imgEl.value.trim() || "",
+      type: typeEl.value, // single|multiple
+      requireName: requireName.checked,
+      security: voteSecurity.value, // none|session|device|code
+      closeAt: closeAt.value || null,
+      options: optionNodes,
+      votes: optionNodes.map(() => 0),
+      codes: voteSecurity.value === "code" ? Array.from({ length: 20 }, () => uid().slice(0, 6)) : []
+    });
+
+    polls.push(poll);
+    write(polls);
+
+    openPoll(poll.id);
+    renderPollsList();
+  } catch (err) {
+    if (err instanceof ValidationError) {
+      formError.textContent = err.message;
+      formError.classList.remove("hidden");
+      return;
+    }
+    console.error("Failed to create poll", err);
+    alert("Something unexpected happened while creating the poll. Please try again.");
+  }
 };
 
 /* ---------- Open + render ---------- */
@@ -189,6 +341,12 @@ function openPoll(id){
     code: "One vote per unique code. You'll be asked for a code."
   };
   securityNote.textContent = notes[active.security] || "";
+  if (active.closeAt) {
+    closeInfo.textContent = `Closes ${formatDateTime(active.closeAt)}`;
+    closeInfo.classList.remove("hidden");
+  } else {
+    closeInfo.classList.add("hidden");
+  }
 
   // share
   const url = `${location.origin}${location.pathname}#${active.id}`;
@@ -201,6 +359,9 @@ function openPoll(id){
 /* ---------- Vote ---------- */
 voteForm.onsubmit = (e)=>{
   e.preventDefault();
+  if(active.closeAt && dayjs().isAfter(dayjs(active.closeAt))){
+    return alert("This poll is closed.");
+  }
   if(active.requireName && !voterName.value.trim()){
     return alert("Please enter your name.");
   }
@@ -233,6 +394,10 @@ voteForm.onsubmit = (e)=>{
   const fresh = read();
   const poll = fresh.find(p=>p.id===active.id);
   selected.forEach(i => poll.votes[i]++);
+  selected.forEach(i => {
+    const option = poll.options[i];
+    option.votes = (option.votes || 0) + 1;
+  });
   write(fresh);
   active = poll;
 
@@ -257,6 +422,7 @@ function renderChart(){
     },
     options:{ responsive:true, animation:false, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
   });
+  renderNestedSummary();
 }
 showResultsBtn.onclick = ()=> renderChart();
 
@@ -269,6 +435,7 @@ resetBtn.onclick = ()=>{
   const fresh = read();
   const p = fresh.find(x=>x.id===active.id);
   p.votes = p.votes.map(()=>0);
+  (p.options || []).forEach(resetOptionVotes);
   write(fresh); active = p; renderChart();
 };
 

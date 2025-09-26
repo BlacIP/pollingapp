@@ -52,7 +52,7 @@ export default function DescriptionImage({
           />
 
           {/* Add image row */}
-          <div className="flex items-center gap-3">
+          <div className="space-y-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -60,12 +60,16 @@ export default function DescriptionImage({
               className="hidden"
               onChange={onFile}
             />
-            <button type="button" className="btn btn-primary flex items-center" onClick={pickImage}>
+            <button
+              type="button"
+              className="btn btn-primary w-full flex items-center justify-center"
+              onClick={pickImage}
+            >
               <ImagePlusIcon className="mr-2 h-4 w-4" /> Add image
             </button>
 
             {image && (
-              <>
+              <div className="flex items-center gap-3">
                 <img
                   src={image}
                   alt="preview"
@@ -78,7 +82,7 @@ export default function DescriptionImage({
                 >
                   Remove
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import dayjs from "dayjs";
 import { getPublicPoll, submitPublicVote, clearCachedPoll } from "../api.js";
 
 export default function PublicPollVote({ pollId }) {
@@ -14,38 +15,81 @@ export default function PublicPollVote({ pollId }) {
 
   const votesStorageKey = `votes_${pollId}`;
 
+  const refreshIntervalRef = useRef(null);
+  const lastForcedFetchRef = useRef(0);
+
   useEffect(() => {
-    const loadPoll = async () => {
-      setLoading(true);
-      setError("");
-      
-      try {
-        // Show loading message after 2 seconds
-        const slowLoadingTimer = setTimeout(() => {
-          if (loading) {
+    if (!pollId) return;
+
+    let active = true;
+    let slowLoadingTimer;
+    let initialLoadComplete = false;
+
+    const runFetch = async ({ withSpinner = false, force = false } = {}) => {
+      if (!active) return;
+
+      if (withSpinner) {
+        setLoading(true);
+        setError("");
+        slowLoadingTimer = setTimeout(() => {
+          if (active && !initialLoadComplete) {
             setError("Loading is taking longer than usual. Google Apps Script may be starting up...");
           }
-        }, 2000);
-        
-        const res = await getPublicPoll(pollId);
-        clearTimeout(slowLoadingTimer);
-        
+        }, 50000);
+      }
+
+      const shouldForce = force || (Date.now() - lastForcedFetchRef.current > 100000);
+      if (shouldForce) {
+        clearCachedPoll(pollId);
+        lastForcedFetchRef.current = Date.now();
+      }
+
+      try {
+        const res = await getPublicPoll(pollId, { force: shouldForce });
+        if (!active) return;
+
         if (res?.ok && res.poll) {
+          initialLoadComplete = true;
           setPoll(res.poll);
-          setError(""); // Clear any loading messages
-        } else {
+          setError("");
+
+          const isClosed = Boolean(res.poll.closeAt) && dayjs().isAfter(dayjs(res.poll.closeAt));
+          if (isClosed && refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+            refreshIntervalRef.current = null;
+          }
+        } else if (withSpinner) {
           setError(res?.error || "Poll not found");
         }
       } catch (err) {
-        setError("Failed to load poll");
+        if (withSpinner) {
+          setError("Failed to load poll");
+        }
       } finally {
-        setLoading(false);
+        if (withSpinner) {
+          clearTimeout(slowLoadingTimer);
+          setLoading(false);
+        }
       }
     };
 
-    if (pollId) {
-      loadPoll();
-    }
+    runFetch({ withSpinner: true, force: true });
+
+    refreshIntervalRef.current = setInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      runFetch({ force: false });
+    }, 5500);
+
+    return () => {
+      active = false;
+      clearTimeout(slowLoadingTimer);
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
   }, [pollId]);
 
   useEffect(() => {
@@ -98,12 +142,21 @@ export default function PublicPollVote({ pollId }) {
   }, [poll?.votes, poll?.options, votesStorageKey]);
 
   const totalVotes = votesArray.reduce((sum, count) => sum + count, 0);
+  const closeTime = poll?.closeAt ? dayjs(poll.closeAt) : null;
+  const isClosed = closeTime ? closeTime.isBefore(dayjs()) : false;
+  const closeLabel = closeTime ? closeTime.format("MMM D, YYYY h:mm A") : "";
 
   const submitVote = async (e) => {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     setError(""); // Clear previous errors
+
+    if (isClosed) {
+      setError("This poll is closed and no longer accepts votes.");
+      setSubmitting(false);
+      return;
+    }
 
     if (poll.requireName && !name.trim()) {
       setError("Please enter your name.");
@@ -124,13 +177,28 @@ export default function PublicPollVote({ pollId }) {
     }
 
     // Check session storage for voting restrictions
-    const scope = poll.security === "session" ? "session" : "none";
+    const scope = poll.security === "session"
+      ? "session"
+      : poll.security === "device"
+        ? "device"
+        : "none";
     const key = `voted_${scope}_${pollId}`;
 
     if (scope === "session" && sessionStorage.getItem(key)) {
       setError("You have already voted in this browser session.");
       setSubmitting(false);
       return;
+    }
+    if (scope === "device") {
+      try {
+        if (localStorage.getItem(key)) {
+          setError("You have already voted on this device.");
+          setSubmitting(false);
+          return;
+        }
+      } catch (storageError) {
+        console.error('Device vote check failed:', storageError);
+      }
     }
 
     const previousVotes = votesArray.slice();
@@ -155,25 +223,54 @@ export default function PublicPollVote({ pollId }) {
       }
 
       if (scope === "session") sessionStorage.setItem(key, "1");
+      if (scope === "device") {
+        try {
+          localStorage.setItem(key, "1");
+        } catch (storageError) {
+          console.error('Failed to persist device vote flag:', storageError);
+        }
+      }
+
+      let latestPoll = null;
 
       try {
         clearCachedPoll(pollId);
-        const latest = await getPublicPoll(pollId);
+        const latest = await getPublicPoll(pollId, { force: true });
         if (latest?.ok && latest.poll) {
-          const latestVotes = Array.isArray(latest.poll.votes)
+          const normalizedVotes = Array.isArray(latest.poll.votes)
             ? latest.poll.votes
             : latest.poll.votes && typeof latest.poll.votes === 'object'
               ? (latest.poll.options || []).map((_, index) => latest.poll.votes[index] || 0)
               : (latest.poll.options || []).map(() => 0);
-          setPoll({ ...latest.poll, pending: false });
-          setLocalVotes(latestVotes);
-          sessionStorage.setItem(votesStorageKey, JSON.stringify(latestVotes));
+          latestPoll = {
+            ...latest.poll,
+            votes: normalizedVotes,
+            pending: false,
+          };
+          setPoll(latestPoll);
+          setLocalVotes(normalizedVotes);
+          sessionStorage.setItem(votesStorageKey, JSON.stringify(normalizedVotes));
         } else {
           setPoll(prev => (prev ? { ...prev, pending: false } : prev));
         }
       } catch (fetchError) {
         console.error('Failed to refresh poll results:', fetchError);
         setPoll(prev => (prev ? { ...prev, pending: false } : prev));
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('publicVoteRecorded', {
+          detail: {
+            pollId,
+            poll: latestPoll,
+          }
+        }));
+      }
+
+      try {
+        localStorage.setItem('pollingapp_vote_ping', JSON.stringify({ pollId, ts: Date.now() }));
+      } catch (pingError) {
+        console.error('Failed to broadcast vote ping:', pingError);
       }
 
       setError('');
@@ -337,6 +434,11 @@ export default function PublicPollVote({ pollId }) {
           <p className="text-gray-500 text-sm">
             {poll.type === "multiple" ? "Select multiple options" : "Select one option"}
           </p>
+          {closeLabel && (
+            <p className={`text-sm mt-2 ${isClosed ? 'text-red-400' : 'text-gray-400'}`}>
+              {isClosed ? `Poll closed on ${closeLabel}` : `Poll closes on ${closeLabel}`}
+            </p>
+          )}
         </div>
 
         <form onSubmit={submitVote} className="space-y-4">
@@ -353,12 +455,19 @@ export default function PublicPollVote({ pollId }) {
                   type={inputType} 
                   name="vote" 
                   value={i} 
-                  className="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500" 
+                  disabled={isClosed || submitting}
+                  className="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 disabled:opacity-50" 
                 />
                 <span className="text-white">{option.text}</span>
               </label>
             ))}
           </div>
+
+          {isClosed && (
+            <div className="bg-red-900/40 border border-red-500 text-red-100 text-sm rounded-lg p-3">
+              This poll is closed and no longer accepts votes.
+            </div>
+          )}
 
           {poll.requireName && (
             <div>
@@ -367,6 +476,7 @@ export default function PublicPollVote({ pollId }) {
                 placeholder="Your name" 
                 value={name} 
                 onChange={e => setName(e.target.value)} 
+                disabled={isClosed || submitting}
               />
             </div>
           )}
@@ -374,7 +484,7 @@ export default function PublicPollVote({ pollId }) {
           <button 
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isClosed}
           >
             {submitting ? "Submitting..." : "Submit Vote"}
           </button>

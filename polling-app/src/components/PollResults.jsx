@@ -1,4 +1,5 @@
 import { useState } from "react";
+import dayjs from "dayjs";
 import {
   BarChartIcon,
   UsersIcon,
@@ -8,7 +9,7 @@ import {
   DownloadIcon
 } from "./icons.jsx";
 
-export default function PollResults({ poll, onBack, onShare }) {
+export default function PollResults({ poll, onBack, onShare, livePolling = false, onToggleLivePolling }) {
   const [copied, setCopied] = useState(false);
 
   // Convert votes object to array if needed
@@ -28,13 +29,15 @@ export default function PollResults({ poll, onBack, onShare }) {
 
   // Format created date
   const createdDate = poll.created_at 
-    ? new Date(poll.created_at).toLocaleDateString()
-    : new Date().toLocaleDateString();
+    ? dayjs(poll.created_at).format("MMM D, YYYY h:mm A")
+    : dayjs().format("MMM D, YYYY h:mm A");
+
+  const closeTime = poll.closeAt ? dayjs(poll.closeAt) : null;
 
   // Determine poll status
-  const now = new Date();
-  const isExpired = poll.closeAt && new Date(poll.closeAt) < now;
+  const isExpired = Boolean(closeTime) && closeTime.isBefore(dayjs());
   const status = isExpired ? 'closed' : 'active';
+  const closeLabel = closeTime ? closeTime.format("MMM D, YYYY h:mm A") : "No close time set";
 
   const exportCSV = () => {
     const rows = [["Option","Votes","Percentage"], 
@@ -65,6 +68,23 @@ export default function PollResults({ poll, onBack, onShare }) {
         <button className="text-muted hover:text-white">
           ⋯
         </button>
+      </div>
+
+      <div className="flex items-center justify-between bg-gray-800/60 border border-gray-700 rounded-lg px-4 py-3">
+        <div>
+          <p className="text-sm text-white font-medium">Live results</p>
+          <p className="text-xs text-muted">{livePolling ? 'Refreshing every 5 seconds.' : 'Updates every 10 minutes or on reload.'}</p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            className="sr-only peer"
+            checked={livePolling}
+            onChange={(e) => onToggleLivePolling?.(e.target.checked)}
+          />
+          <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+          <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+        </label>
       </div>
 
       {/* Title and Status */}
@@ -112,6 +132,9 @@ export default function PollResults({ poll, onBack, onShare }) {
             <span className="text-lg font-bold">{createdDate}</span>
           </div>
           <div className="text-sm text-muted">Created</div>
+          <div className="text-xs text-muted mt-1">
+            {closeTime ? `Closes ${closeLabel}` : closeLabel}
+          </div>
         </div>
         
         <div className="bg-gray-700/50 rounded-lg p-4">

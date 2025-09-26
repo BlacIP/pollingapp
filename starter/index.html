@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 </head>
 <body>
   <header class="container">
@@ -18,6 +19,7 @@
   <main class="container grid">
     <section class="card">
       <div class="card-body">
+        <div id="form-error" class="alert hidden" role="alert"></div>
         <label class="label">Title</label>
         <input id="poll-title" class="input" placeholder="Type your question here"/>
 
@@ -145,9 +147,17 @@
 
         <div id="results" class="hidden">
           <canvas id="resultsChart"></canvas>
+          <div id="nested-summary" class="nested-summary hidden">
+            <div class="nested-summary-head">
+              <h4>Option totals</h4>
+              <span id="nested-total" class="pill">0</span>
+            </div>
+            <div id="nested-tree"></div>
+          </div>
         </div>
 
         <p id="security-note" class="hint"></p>
+        <p id="close-info" class="hint hidden"></p>
       </div>
     </section>
 

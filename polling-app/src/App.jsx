@@ -5,7 +5,7 @@ import PollList from "./components/PollList.jsx";
 import PollCreatedSuccess from "./components/PollCreatedSuccess.jsx";
 import ShareModal from "./components/ShareModal.jsx";
 import AuthPage from "./auth/AuthPage.jsx";
-import { myPolls, createPoll, updatePollStatus, permanentlyDeletePoll, clearUserPollsCache, getStoredAuth, storeAuth, clearAuth, markAuthLoggedOut, setUserPollsCache, startBackgroundSync, stopBackgroundSync } from "./api.js";
+import { myPolls, createPoll, updatePollStatus, permanentlyDeletePoll, clearUserPollsCache, getStoredAuth, storeAuth, clearAuth, markAuthLoggedOut, setUserPollsCache, startBackgroundSync, stopBackgroundSync, clearCachedPoll, setCachedPoll } from "./api.js";
 import PollResults from "./components/PollResults.jsx";
 import PublicPollVote from "./components/PublicPollVote.jsx";
 
@@ -14,6 +14,20 @@ export default function App() {
   const [authLoaded, setAuthLoaded] = useState(false);
   const [polls, setPolls] = useState([]);
   const [activeId, setActiveId] = useState(null);
+  const [livePolls, setLivePolls] = useState(() => {
+    try {
+      const raw = localStorage.getItem('pollingapp_live_results');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to restore live polling preferences:', err);
+    }
+    return {};
+  });
   const [showSuccess, setShowSuccess] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -147,7 +161,132 @@ export default function App() {
       }
       window.removeEventListener('pollsUpdated', handlePollsUpdated);
     };
+  }, [auth?.token, livePolls]);
+
+  // Force-refresh owner views when a public vote is recorded
+  useEffect(() => {
+    if (!auth?.token) return;
+
+    let cancelled = false;
+
+    const handlePublicVoteRecorded = async (event) => {
+      const { pollId, poll: updatedPoll } = event.detail || {};
+      if (!pollId) return;
+
+      try {
+        clearCachedPoll(pollId);
+
+        if (updatedPoll) {
+          let merged = false;
+          setPolls(prev => {
+            const index = prev.findIndex(p => p.id === pollId);
+            if (index === -1) {
+              return prev;
+            }
+
+            merged = true;
+            const next = [...prev];
+            const current = prev[index];
+            const normalizedVotes = Array.isArray(updatedPoll.votes) ? updatedPoll.votes : current.votes;
+            const mergedPoll = {
+              ...current,
+              ...updatedPoll,
+              votes: normalizedVotes,
+            };
+            next[index] = mergedPoll;
+
+            setUserPollsCache(next);
+            setCachedPoll(mergedPoll.id, mergedPoll);
+
+            return next;
+          });
+          if (merged) {
+            return;
+          }
+        }
+
+        if (!cancelled) {
+          const refreshed = await myPolls(auth.token, { force: true });
+          if (refreshed?.ok) {
+            setPolls(refreshed.polls || []);
+            setUserPollsCache(refreshed.polls || []);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to refresh polls after public vote:', error);
+      }
+    };
+
+    window.addEventListener('publicVoteRecorded', handlePublicVoteRecorded);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('publicVoteRecorded', handlePublicVoteRecorded);
+    };
   }, [auth?.token]);
+
+  // Listen for vote pings from other tabs/windows
+  useEffect(() => {
+    if (!auth?.token) return;
+
+    const handleStoragePing = (event) => {
+      if (event.key !== 'pollingapp_vote_ping' || !event.newValue) return;
+
+      let payload = null;
+      try {
+        payload = JSON.parse(event.newValue);
+      } catch (err) {
+        console.error('Failed to parse vote ping payload:', err);
+      }
+
+      const pollId = payload?.pollId;
+      if (!pollId || !livePolls[pollId]) return;
+
+      (async () => {
+        try {
+          clearCachedPoll(pollId);
+          const refreshed = await myPolls(auth.token, { force: true });
+          if (refreshed?.ok) {
+            setPolls(refreshed.polls || []);
+            setUserPollsCache(refreshed.polls || []);
+          }
+        } catch (err) {
+          console.error('Failed to refresh after vote ping:', err);
+        }
+      })();
+    };
+
+    window.addEventListener('storage', handleStoragePing);
+    return () => window.removeEventListener('storage', handleStoragePing);
+  }, [auth?.token]);
+
+  // Continuously refresh the active poll when live mode is enabled
+  useEffect(() => {
+    if (!auth?.token || !showResults || !activeId) return;
+    const liveEnabled = Boolean(livePolls[activeId]);
+    if (!liveEnabled) return;
+
+    let cancelled = false;
+
+    const pullLatest = async () => {
+      try {
+        const res = await myPolls(auth.token, { force: true });
+        if (!cancelled && res?.ok) {
+          setPolls(res.polls || []);
+          setUserPollsCache(res.polls || []);
+        }
+      } catch (err) {
+        console.error('Live refresh failed:', err);
+      }
+    };
+
+    pullLatest();
+    const interval = setInterval(pullLatest, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [auth?.token, showResults, activeId, livePolls[activeId]]);
 
   // Show loading while checking auth
   if (!authLoaded) {
@@ -349,6 +488,23 @@ export default function App() {
     setShowResults(true);
   };
 
+  const handleLiveToggle = (pollId, enabled) => {
+    setLivePolls(prev => {
+      const next = { ...prev };
+      if (enabled) {
+        next[pollId] = true;
+      } else {
+        delete next[pollId];
+      }
+      try {
+        localStorage.setItem('pollingapp_live_results', JSON.stringify(next));
+      } catch (err) {
+        console.error('Failed to persist live polling preferences:', err);
+      }
+      return next;
+    });
+  };
+
   const handleOpenPoll = (id) => {
     setActiveId(id);
     setShowSuccess(true);
@@ -372,6 +528,8 @@ export default function App() {
           poll={activePoll}
           onBack={handleBackToPolls}
           onShare={() => setShareOpen(true)}
+          livePolling={Boolean(livePolls[activePoll.id])}
+          onToggleLivePolling={(value) => handleLiveToggle(activePoll.id, value)}
         />
       );
     }

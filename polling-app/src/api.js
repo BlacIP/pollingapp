@@ -177,7 +177,7 @@ function getCachedPoll(pollId) {
   return null;
 }
 
-function setCachedPoll(pollId, pollData) {
+export function setCachedPoll(pollId, pollData) {
   try {
     const cacheData = {
       data: pollData,
@@ -198,23 +198,26 @@ export function clearCachedPoll(pollId) {
 }
 
 // Add caching for user's polls
-export function myPolls(token) {
+export function myPolls(token, options = {}) {
   if (!token) {
     return Promise.resolve({ ok: false, error: 'Authentication required' });
   }
+  const { force = false } = options;
   
-  // Check cache first
-  try {
-    const cached = localStorage.getItem(POLLS_CACHE_KEY);
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < CACHE_DURATION) {
-        console.log('Returning cached user polls');
-        return Promise.resolve({ ok: true, polls: data });
+  if (!force) {
+    // Check cache first
+    try {
+      const cached = localStorage.getItem(POLLS_CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_DURATION) {
+          console.log('Returning cached user polls');
+          return Promise.resolve({ ok: true, polls: data });
+        }
       }
+    } catch (error) {
+      console.error('User polls cache read error:', error);
     }
-  } catch (error) {
-    console.error('User polls cache read error:', error);
   }
   
   // Fetch from API and cache
@@ -324,16 +327,21 @@ export function vote(poll_id, option_index, voter_name = '') {
   return withRetry(() => post('polls/vote', voteData));
 }
 
-export function getPublicPoll(poll_id) {
+export function getPublicPoll(poll_id, options = {}) {
   if (!poll_id) {
     return Promise.resolve({ ok: false, error: 'Poll ID required' });
   }
+  const { force = false } = options;
   
-  // Check cache first
-  const cached = getCachedPoll(poll_id);
-  if (cached) {
-    console.log('Returning cached poll:', poll_id);
-    return Promise.resolve({ ok: true, poll: cached });
+  if (force) {
+    clearCachedPoll(poll_id);
+  } else {
+    // Check cache first
+    const cached = getCachedPoll(poll_id);
+    if (cached) {
+      console.log('Returning cached poll:', poll_id);
+      return Promise.resolve({ ok: true, poll: cached });
+    }
   }
   
   // Fetch from API and cache result
