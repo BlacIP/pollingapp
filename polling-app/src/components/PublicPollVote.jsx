@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import dayjs from "dayjs";
 import { getPublicPoll, submitPublicVote, clearCachedPoll } from "../api.js";
 
@@ -14,9 +14,6 @@ export default function PublicPollVote({ pollId }) {
   const [lightboxImage, setLightboxImage] = useState(null);
 
   const votesStorageKey = `votes_${pollId}`;
-
-  const refreshIntervalRef = useRef(null);
-  const lastForcedFetchRef = useRef(0);
 
   useEffect(() => {
     if (!pollId) return;
@@ -38,14 +35,12 @@ export default function PublicPollVote({ pollId }) {
         }, 50000);
       }
 
-      const shouldForce = force || (Date.now() - lastForcedFetchRef.current > 100000);
-      if (shouldForce) {
+      if (force) {
         clearCachedPoll(pollId);
-        lastForcedFetchRef.current = Date.now();
       }
 
       try {
-        const res = await getPublicPoll(pollId, { force: shouldForce });
+        const res = await getPublicPoll(pollId, { force });
         if (!active) return;
 
         if (res?.ok && res.poll) {
@@ -54,9 +49,8 @@ export default function PublicPollVote({ pollId }) {
           setError("");
 
           const isClosed = Boolean(res.poll.closeAt) && dayjs().isAfter(dayjs(res.poll.closeAt));
-          if (isClosed && refreshIntervalRef.current) {
-            clearInterval(refreshIntervalRef.current);
-            refreshIntervalRef.current = null;
+          if (isClosed) {
+            setVoteSubmitted(true);
           }
         } else if (withSpinner) {
           setError(res?.error || "Poll not found");
@@ -75,20 +69,9 @@ export default function PublicPollVote({ pollId }) {
 
     runFetch({ withSpinner: true, force: true });
 
-    refreshIntervalRef.current = setInterval(() => {
-      if (document.visibilityState === "hidden") {
-        return;
-      }
-      runFetch({ force: false });
-    }, 5500);
-
     return () => {
       active = false;
       clearTimeout(slowLoadingTimer);
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current);
-        refreshIntervalRef.current = null;
-      }
     };
   }, [pollId]);
 

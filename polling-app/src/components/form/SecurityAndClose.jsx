@@ -1,3 +1,5 @@
+const TIME_OPTIONS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+
 export default function SecurityAndClose({
   allowMulti, setAllowMulti,
   requireName, setRequireName,
@@ -86,13 +88,22 @@ export default function SecurityAndClose({
                 value={closeDate}
                 onChange={(e) => setCloseDate(e.target.value)}
               />
-              <input
-                type="time"
-                className="input"
-                value={closeTime}
-                onChange={(e) => setCloseTime(e.target.value)}
-              />
+              <div className="select">
+                <select
+                  value={closeTime}
+                  onChange={(e) => setCloseTime(e.target.value)}
+                  disabled={!closeDate}
+                >
+                  <option value="">Select time…</option>
+                  {TIME_OPTIONS.map(time => (
+                    <option key={time} value={time}>{time}</option>
+                  ))}
+                </select>
+              </div>
             </div>
+            {!closeDate && (
+              <p className="text-xs text-muted">Choose a date first, then select a time.</p>
+            )}
           </div>
         )}
       </div>

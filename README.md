@@ -16,6 +16,11 @@ My purpose in creating this project was to learn how to manage state across tabs
 - **Tooling**: npm, eslint, Vite dev server, and a background sync harness for owner dashboards
 - **Starter Module**: Vanilla HTML/CSS/JS demo (`starter/`) that uses localStorage + Chart.js via CDN
 
+### Debug Logging
+
+- Set `VITE_DEBUG_LOGS=true` in an `.env` file (or `npm run dev -- --mode development-debug`) to re-enable `console.log/info/debug` output in the React app. By default these are silenced to avoid noisy production builds.
+- In the starter demo you can enable logs by running `localStorage.setItem('pollingapp_debug_logs', '1')` in the browser console before refreshing the page.
+
 ## Useful Websites
 
 - [React Documentation](https://react.dev)

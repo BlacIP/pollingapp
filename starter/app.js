@@ -3,6 +3,13 @@ const STORAGE_KEY = "pollingapp_polls_v2";
 const votedKey = (id, scope) => `voted_${scope}_${id}`;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+const STARTER_LOGS_ENABLED = localStorage.getItem("pollingapp_debug_logs") === "1";
+if (!STARTER_LOGS_ENABLED) {
+  console.log = () => {};
+  console.info = () => {};
+  console.debug = () => {};
+}
+
 class ValidationError extends Error {
   constructor(message) {
     super(message);
