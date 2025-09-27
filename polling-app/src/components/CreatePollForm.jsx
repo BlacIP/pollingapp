@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import dayjs from "dayjs";
 import { uid } from "../utils/id.js";
 import TitleField from "./form/TitleField.jsx";
 import DescriptionImage from "./form/DescriptionImage.jsx";
@@ -19,7 +20,15 @@ export default function CreatePollForm({ onCreate, loading }) {
   const [requireName, setRequireName] = useState(false);
   const [security, setSecurity] = useState("session");
   const [enableClose, setEnableClose] = useState(false);
-  const [closeAt, setCloseAt] = useState("");
+  const [closeDate, setCloseDate] = useState("");
+  const [closeTime, setCloseTime] = useState("");
+
+  useEffect(() => {
+    if (!enableClose) {
+      setCloseDate("");
+      setCloseTime("");
+    }
+  }, [enableClose]);
 
   const handlePaste = async () => {
     try {
@@ -43,8 +52,13 @@ export default function CreatePollForm({ onCreate, loading }) {
       assert(title.trim(), "Please enter a poll title");
       assert(clean.length >= 2, "Please provide at least 2 answer options");
 
+      let closeAtIso = null;
       if (enableClose) {
-        assert(closeAt, "Choose a close time or disable the close setting");
+        assert(closeDate, "Choose a close date or disable the close setting");
+        assert(closeTime, "Choose a close time or disable the close setting");
+        const combined = dayjs(`${closeDate}T${closeTime}`);
+        assert(combined.isValid(), "Enter a valid close date and time");
+        closeAtIso = combined.toISOString();
       }
 
       const poll = {
@@ -55,7 +69,7 @@ export default function CreatePollForm({ onCreate, loading }) {
         type: allowMulti ? "multiple" : "single",
         requireName,
         security,
-        closeAt: enableClose ? closeAt : null,
+        closeAt: enableClose ? closeAtIso : null,
         options: clean.map(t => ({ id: uid(), text: t })),
         votes: clean.map(() => 0),
       };
@@ -110,7 +124,8 @@ export default function CreatePollForm({ onCreate, loading }) {
           requireName={requireName} setRequireName={setRequireName}
           security={security} setSecurity={setSecurity}
           enableClose={enableClose} setEnableClose={setEnableClose}
-          closeAt={closeAt} setCloseAt={setCloseAt}
+          closeDate={closeDate} setCloseDate={setCloseDate}
+          closeTime={closeTime} setCloseTime={setCloseTime}
         />
 
         <div className="pt-4">

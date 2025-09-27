@@ -2,11 +2,11 @@
 
 I built Polling App to stretch my skills as a software engineer by combining a modern React front end with an unconventional Google Apps Script backend. The goal was to deliver a responsive polling experience, explore real-time update patterns, and practice structuring a project that can scale from a simple prototype to a richer product.
 
-The software lets creators compose polls, control voting security (session, device, or code), add rich descriptions and images, and watch results roll in on a dedicated owner dashboard. Voters receive a streamlined public page that enforces single votes per device/session, supports multi-select questions, and renders a live results recap after submitting. A “week-one” vanilla JavaScript starter is also included to demonstrate the same core ideas in a pure client-side setting.
+The software lets creators compose polls, control voting security (session, device, or code), add rich descriptions and images, and watch results roll in on a dedicated owner dashboard. Voters receive a streamlined public page that enforces single votes per device/session, supports multi-select questions, and renders a live results recap after submitting.
 
 My purpose in creating this project was to learn how to manage state across tabs, tame caching in a SPA, and integrate a lightweight spreadsheet-backed API without overloading it. The journey covered validation patterns, recursive UI rendering, background sync logic, and selectively enabling real-time updates on a per-poll basis.
 
-[Software Demo Video](https://youtu.be/n1jiPmYv45M)
+[Software Demo Video](https://youtu.be/3XrTGqAf2UU)
 
 # Development Environment
 

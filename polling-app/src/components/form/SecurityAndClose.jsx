@@ -3,7 +3,8 @@ export default function SecurityAndClose({
   requireName, setRequireName,
   security, setSecurity,
   enableClose, setEnableClose,
-  closeAt, setCloseAt
+  closeDate, setCloseDate,
+  closeTime, setCloseTime
 }) {
   const securityNotes = {
     none: "Participants can vote multiple times. Limited to 1,000 votes per poll.",
@@ -78,12 +79,20 @@ export default function SecurityAndClose({
         {enableClose && (
           <div className="space-y-2">
             <label className="label text-sm text-muted">Close at</label>
-            <input
-              type="datetime-local"
-              className="input"
-              value={closeAt}
-              onChange={(e) => setCloseAt(e.target.value)}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input
+                type="date"
+                className="input"
+                value={closeDate}
+                onChange={(e) => setCloseDate(e.target.value)}
+              />
+              <input
+                type="time"
+                className="input"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+              />
+            </div>
           </div>
         )}
       </div>

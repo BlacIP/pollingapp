@@ -59,7 +59,8 @@ const allowMulti = byId("allow-multi");
 const requireName = byId("require-name");
 const voteSecurity = byId("vote-security");
 const useCaptcha = byId("use-captcha"); // visual only in this demo
-const closeAt = byId("close-at");
+const closeDateInput = byId("close-date");
+const closeTimeInput = byId("close-time");
 
 const createBtn = byId("create-btn");
 
@@ -263,8 +264,13 @@ createBtn.onclick = () => {
     );
     if (hasDuplicate) throw new ValidationError("Use unique option labels to avoid confusion.");
 
-    if (closeAt.value) {
-      const closeTime = dayjs(closeAt.value);
+    const hasCloseDate = Boolean(closeDateInput.value);
+    const hasCloseTime = Boolean(closeTimeInput.value);
+    if (hasCloseDate || hasCloseTime) {
+      if (!hasCloseDate || !hasCloseTime) {
+        throw new ValidationError("Provide both a close date and time or leave both blank.");
+      }
+      const closeTime = dayjs(`${closeDateInput.value}T${closeTimeInput.value}`);
       if (!closeTime.isValid()) {
         throw new ValidationError("Close time must be a valid date and time.");
       }
@@ -281,7 +287,7 @@ createBtn.onclick = () => {
       type: typeEl.value, // single|multiple
       requireName: requireName.checked,
       security: voteSecurity.value, // none|session|device|code
-      closeAt: closeAt.value || null,
+      closeAt: (hasCloseDate && hasCloseTime) ? dayjs(`${closeDateInput.value}T${closeTimeInput.value}`).toISOString() : null,
       options: optionNodes,
       votes: optionNodes.map(() => 0),
       codes: voteSecurity.value === "code" ? Array.from({ length: 20 }, () => uid().slice(0, 6)) : []

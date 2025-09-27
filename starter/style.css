@@ -75,6 +75,7 @@ body{
 
 .advanced summary{cursor:pointer; color:#b9c0ff}
 .adv-grid{display:grid; grid-template-columns:1fr; gap:12px; margin-top:8px}
+.close-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px}
 
 .actions{display:flex; justify-content:flex-end; margin-top:16px}
 

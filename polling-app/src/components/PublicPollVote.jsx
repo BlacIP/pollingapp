@@ -145,6 +145,20 @@ export default function PublicPollVote({ pollId }) {
   const closeTime = poll?.closeAt ? dayjs(poll.closeAt) : null;
   const isClosed = closeTime ? closeTime.isBefore(dayjs()) : false;
   const closeLabel = closeTime ? closeTime.format("MMM D, YYYY h:mm A") : "";
+  const pollStatus = poll?.status || "active";
+  const isDisabled = pollStatus === "disabled";
+  const isArchived = pollStatus === "archived";
+  const isDeleted = pollStatus === "deleted";
+  const votingBlocked = isClosed || isDisabled || isArchived || isDeleted;
+  const statusMessage = isDeleted
+    ? "This poll is no longer available."
+    : isDisabled
+      ? "This poll has been temporarily disabled by the owner and is not accepting votes."
+      : isArchived
+        ? "This poll has been archived by the owner and is not accepting votes."
+        : isClosed
+          ? "This poll is closed and no longer accepts votes."
+          : "";
 
   const submitVote = async (e) => {
     e.preventDefault();
@@ -152,8 +166,8 @@ export default function PublicPollVote({ pollId }) {
     setSubmitting(true);
     setError(""); // Clear previous errors
 
-    if (isClosed) {
-      setError("This poll is closed and no longer accepts votes.");
+    if (votingBlocked) {
+      setError(statusMessage || "This poll is not accepting votes at this time.");
       setSubmitting(false);
       return;
     }
@@ -300,6 +314,16 @@ export default function PublicPollVote({ pollId }) {
   }
 
   if (error || !poll) {
+    if (poll && isDeleted) {
+      return (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold text-white mb-2">Poll Unavailable</h1>
+            <p className="text-gray-400">This poll has been removed by its owner.</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
@@ -347,6 +371,9 @@ export default function PublicPollVote({ pollId }) {
             <p className="text-gray-400">
               {submitting ? 'Finalizing your vote...' : 'Thank you for participating in this poll.'}
             </p>
+            {statusMessage && (
+              <p className="text-xs text-yellow-300 mt-2">{statusMessage}</p>
+            )}
           </div>
 
           {poll.image && (
@@ -434,6 +461,11 @@ export default function PublicPollVote({ pollId }) {
           <p className="text-gray-500 text-sm">
             {poll.type === "multiple" ? "Select multiple options" : "Select one option"}
           </p>
+          {statusMessage && (
+            <div className="bg-yellow-900/50 border border-yellow-500 text-yellow-100 text-sm rounded-lg p-3 mt-3">
+              {statusMessage}
+            </div>
+          )}
           {closeLabel && (
             <p className={`text-sm mt-2 ${isClosed ? 'text-red-400' : 'text-gray-400'}`}>
               {isClosed ? `Poll closed on ${closeLabel}` : `Poll closes on ${closeLabel}`}
@@ -455,19 +487,13 @@ export default function PublicPollVote({ pollId }) {
                   type={inputType} 
                   name="vote" 
                   value={i} 
-                  disabled={isClosed || submitting}
+                  disabled={votingBlocked || submitting}
                   className="w-4 h-4 text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 disabled:opacity-50" 
                 />
                 <span className="text-white">{option.text}</span>
               </label>
             ))}
           </div>
-
-          {isClosed && (
-            <div className="bg-red-900/40 border border-red-500 text-red-100 text-sm rounded-lg p-3">
-              This poll is closed and no longer accepts votes.
-            </div>
-          )}
 
           {poll.requireName && (
             <div>
@@ -476,7 +502,7 @@ export default function PublicPollVote({ pollId }) {
                 placeholder="Your name" 
                 value={name} 
                 onChange={e => setName(e.target.value)} 
-                disabled={isClosed || submitting}
+                disabled={votingBlocked || submitting}
               />
             </div>
           )}
@@ -484,7 +510,7 @@ export default function PublicPollVote({ pollId }) {
           <button 
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
             type="submit"
-            disabled={submitting || isClosed}
+            disabled={submitting || votingBlocked}
           >
             {submitting ? "Submitting..." : "Submit Vote"}
           </button>
